@@ -1,0 +1,2648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emailhog — Email Sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --surface3: #1e2a3e;
+    --border: rgba(99,179,237,0.12);
+    --border2: rgba(99,179,237,0.22);
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --accent3: #34d399;
+    --danger: #f87171;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --text3: #475569;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-size: 14px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(56,189,248,0.05) 0%, transparent 70%);
+    top: -200px; left: -200px;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    position: relative; z-index: 10;
+    background: rgba(17,24,39,0.96);
+    border-bottom: 1px solid var(--border2);
+    padding: 0 20px;
+    height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+  }
+
+  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-weight: 700; font-size: 16px; letter-spacing: -0.5px; color: var(--text); }
+  .logo-icon { width: 30px; height: 30px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 0 16px rgba(56,189,248,0.35); }
+  .logo-version { font-family: var(--mono); font-size: 10px; color: var(--accent); background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.2); padding: 2px 7px; border-radius: 4px; letter-spacing: 1px; }
+
+  .header-right { display: flex; align-items: center; gap: 10px; }
+
+  .search-wrap { position: relative; display: flex; align-items: center; }
+  .search-icon { position: absolute; left: 10px; color: var(--text3); font-size: 14px; pointer-events: none; }
+  .search-input { background: var(--surface2); border: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 12px; padding: 7px 12px 7px 32px; border-radius: 8px; width: 220px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+  .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(56,189,248,0.1); }
+  .search-input::placeholder { color: var(--text3); }
+
+  .status-indicator { display: flex; align-items: center; gap: 6px; }
+  .status-dot { width: 7px; height: 7px; background: var(--accent3); border-radius: 50%; box-shadow: 0 0 8px var(--accent3); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;box-shadow:0 0 8px var(--accent3);} 50%{opacity:0.5;box-shadow:0 0 18px var(--accent3);} }
+  .status-text { font-family: var(--mono); font-size: 11px; color: var(--accent3); }
+
+  .btn { font-family: var(--sans); font-size: 12px; font-weight: 500; padding: 7px 14px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+  .btn-danger { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+  .btn-danger:hover { background: rgba(248,113,113,0.2); }
+  .btn-compose { background: rgba(56,189,248,0.1); color: var(--accent); border: 1px solid rgba(56,189,248,0.2); }
+.btn-compose:hover { background: rgba(56,189,248,0.2); }
+
+  /* ===== MAIN ===== */
+  .main { display: flex; flex: 1; overflow: hidden; position: relative; z-index: 1; }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar { width: 320px; flex-shrink: 0; background: rgba(17,24,39,0.85); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+  .sidebar-top { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .inbox-label { font-family: var(--mono); font-size: 10px; color: var(--text3); letter-spacing: 2px; text-transform: uppercase; }
+  .email-count { font-family: var(--mono); font-size: 11px; background: rgba(56,189,248,0.1); color: var(--accent); border: 1px solid rgba(56,189,248,0.2); padding: 2px 8px; border-radius: 20px; }
+
+  .email-list { flex: 1; overflow-y: auto; }
+  .email-list::-webkit-scrollbar { width: 4px; }
+  .email-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+  .email-row { padding: 13px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all 0.18s; position: relative; animation: slideIn 0.3s ease forwards; }
+  @keyframes slideIn { from{opacity:0;transform:translateX(-8px);}to{opacity:1;transform:translateX(0);} }
+  .email-row:hover { background: var(--surface2); }
+  .email-row.active { background: var(--surface2); border-left: 2px solid var(--accent); padding-left: 14px; }
+
+  .row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .row-sender { font-weight: 600; font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 175px; }
+  .row-time { font-family: var(--mono); font-size: 10px; color: var(--text3); flex-shrink: 0; }
+  .row-subject { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-badge { display: inline-block; margin-top: 5px; font-family: var(--mono); font-size: 9px; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-html { background: rgba(56,189,248,0.08); color: var(--accent); border: 1px solid rgba(56,189,248,0.18); }
+  .badge-attach { background: rgba(129,140,248,0.08); color: var(--accent2); border: 1px solid rgba(129,140,248,0.18); }
+
+  .sidebar-footer { padding: 8px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 10px; color: var(--text3); }
+  .smtp-badge { background: rgba(52,211,153,0.1); color: var(--accent3); border: 1px solid rgba(52,211,153,0.2); padding: 2px 8px; border-radius: 4px; }
+
+  /* ===== DETAIL PANEL ===== */
+  .detail-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+.empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    gap: 6px;
+    animation: fadeIn 0.6s ease;
+    padding: 40px 20px;
+}
+
+/* Make images in composer editor easily selectable */
+#editorRich img {
+    cursor: pointer;
+    display: block;
+    margin: 8px 0;
+    max-width: 480px;
+    border-radius: 4px;
+    outline: none;
+}
+#editorRich img:hover {
+    outline: 2px solid #38bdf8;
+    border-radius: 4px;
+}
+#editorRich img.selected,
+#editorRich img:focus {
+    outline: 2px solid #38bdf8;
+}
+
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);} }
+@keyframes orbit1 {
+    from { transform: rotate(0deg) translateX(54px) rotate(0deg); }
+    to   { transform: rotate(360deg) translateX(54px) rotate(-360deg); }
+}
+@keyframes orbit2 {
+    from { transform: rotate(120deg) translateX(54px) rotate(-120deg); }
+    to   { transform: rotate(480deg) translateX(54px) rotate(-480deg); }
+}
+@keyframes orbit3 {
+    from { transform: rotate(240deg) translateX(54px) rotate(-240deg); }
+    to   { transform: rotate(600deg) translateX(54px) rotate(-600deg); }
+}
+@keyframes floatCenter {
+    0%,100% { transform: translate(-50%,-50%) translateY(0px); }
+    50%      { transform: translate(-50%,-50%) translateY(-5px); }
+}
+@keyframes scanline {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(400%); }
+}
+
+@keyframes glowPulse {
+    0%,100% { opacity:0.6; transform:scale(1); }
+    50% { opacity:1; transform:scale(1.08); }
+}
+
+@keyframes shimmer {
+    0%,100% { opacity:0.4; }
+    50% { opacity:1; }
+}
+
+@keyframes floatEnv {
+    0%,100% { transform:translateY(0px); }
+    50% { transform:translateY(-6px); }
+}
+
+@keyframes floatDot1 {
+    0%,100% { transform:translateY(0px) translateX(0px); opacity:0.7; }
+    50% { transform:translateY(-8px) translateX(3px); opacity:0.3; }
+}
+
+@keyframes floatDot2 {
+    0%,100% { transform:translateY(0px) translateX(0px); opacity:0.5; }
+    50% { transform:translateY(6px) translateX(-4px); opacity:0.2; }
+}
+
+  .email-detail { display: flex; flex-direction: column; flex: 1; overflow: hidden; animation: fadeIn 0.25s ease; }
+
+  .detail-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 18px 24px 14px; }
+  .detail-subject { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 12px; line-height: 1.4; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .meta-item { display: flex; align-items: center; gap: 8px; }
+  .meta-label { font-family: var(--mono); font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; width: 38px; flex-shrink: 0; }
+  .meta-value { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 24px; gap: 2px; }
+  .tab-btn { font-family: var(--mono); font-size: 11px; padding: 10px 14px; background: none; border: none; color: var(--text3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; letter-spacing: 0.5px; }
+  .tab-btn:hover { color: var(--text2); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .action-bar { display: flex; gap: 8px; padding: 10px 24px; background: var(--surface2); border-bottom: 1px solid var(--border); align-items: center; flex-shrink: 0; }
+  .device-toggles { display: flex; gap: 4px; }
+  .dev-btn { font-family: var(--mono); font-size: 10px; padding: 5px 10px; border-radius: 5px; border: 1px solid var(--border); background: var(--surface3); color: var(--text3); cursor: pointer; transition: all 0.2s; }
+  .dev-btn.active, .dev-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(56,189,248,0.08); }
+  .spacer { flex: 1; }
+
+  .action-btn { font-family: var(--mono); font-size: 11px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border2); background: var(--surface3); color: var(--text2); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 5px; }
+  .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .action-btn.ai { border-color: rgba(129,140,248,0.3); color: var(--accent2); background: rgba(129,140,248,0.06); }
+  .action-btn.ai:hover { background: rgba(129,140,248,0.14); border-color: var(--accent2); }
+  .action-btn.del { color: var(--danger); border-color: rgba(248,113,113,0.25); }
+  .action-btn.del:hover { background: rgba(248,113,113,0.08); }
+
+  /* ===== PREVIEW TAB ===== */
+  .preview-wrap { flex: 1; overflow-y: auto; padding: 24px; display: flex; justify-content: center; align-items: flex-start; }
+  .preview-wrap::-webkit-scrollbar { width: 4px; }
+  .preview-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+.iframe-shell {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--border2), 0 24px 60px rgba(0,0,0,0.5);
+    transition: width 0.35s cubic-bezier(0.4,0,0.2,1);
+    width: 375px;
+    max-width: 100%;
+    min-width: 320px;
+    margin: 0 auto;
+}
+.iframe-topbar {
+    background: #1e1e1e;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.dot-red { background: #ff5f57; }
+.dot-yellow { background: #febc2e; }
+.dot-green { background: #28c840; }
+.topbar-label { font-family: var(--mono); font-size: 10px; color: #666; margin-left: 8px; }
+.iframe-body {
+    background: #f1f3f4;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    overflow-y: auto;
+}
+.iframe-body::-webkit-scrollbar { width: 6px; }
+.iframe-body::-webkit-scrollbar-track { background: #f1f3f4; }
+.iframe-body::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+.iframe-body iframe {
+    width: 100%;
+    border: none;
+    display: block;
+    background: white;
+}
+
+  /* ===== HEADERS TAB ===== */
+  .headers-wrap { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .headers-wrap::-webkit-scrollbar { width: 4px; }
+  .headers-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  .header-row { display: grid; grid-template-columns: 200px 1fr; gap: 0; border-bottom: 1px solid var(--border); }
+  .header-key { font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 9px 12px; background: rgba(56,189,248,0.04); border-right: 1px solid var(--border); }
+  .header-val { font-family: var(--mono); font-size: 11px; color: var(--text2); padding: 9px 12px; word-break: break-all; }
+  .header-row.critical .header-key { color: var(--accent3); background: rgba(52,211,153,0.04); }
+  .header-section { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--text3); padding: 14px 12px 6px; }
+
+  /* ===== SMTP LOG TAB ===== */
+  .smtp-wrap { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .smtp-wrap::-webkit-scrollbar { width: 4px; }
+  .smtp-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+  .smtp-line { display: flex; gap: 12px; padding: 5px 0; font-family: var(--mono); font-size: 12px; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  .smtp-dir-c { color: var(--accent); min-width: 36px; }
+  .smtp-dir-s { color: var(--accent3); min-width: 36px; }
+  .smtp-msg { color: var(--text2); }
+  .smtp-line.error .smtp-msg { color: var(--danger); }
+
+  /* ===== LINK CHECKER ===== */
+  .link-results { padding: 16px 24px; }
+  .link-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; border: 1px solid var(--border); font-size: 12px; }
+  .link-status { font-family: var(--mono); font-size: 10px; padding: 3px 8px; border-radius: 4px; flex-shrink: 0; }
+  .status-ok { background: rgba(52,211,153,0.1); color: var(--accent3); border: 1px solid rgba(52,211,153,0.2); }
+  .status-broken { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+  .status-redirect { background: rgba(251,191,36,0.1); color: #fbbf24; border: 1px solid rgba(251,191,36,0.2); }
+  .link-url { color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 11px; }
+
+  /* ===== AI RESULT ===== */
+  .ai-result-wrap { padding: 16px 24px; overflow-y: auto; flex: 1; }
+  .ai-result-wrap::-webkit-scrollbar { width: 4px; }
+  .score-gauge { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 10px; margin-bottom: 16px; }
+  .score-num { font-family: var(--mono); font-size: 42px; font-weight: 700; line-height: 1; }
+  .score-info .score-label { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .score-info .score-summary { font-size: 12px; color: var(--text2); line-height: 1.5; }
+  .issue-card { border-radius: 8px; padding: 12px 14px; margin-bottom: 8px; border-left: 3px solid; }
+  .issue-card.HIGH { background: rgba(248,113,113,0.06); border-color: var(--danger); }
+  .issue-card.MEDIUM { background: rgba(251,191,36,0.06); border-color: #fbbf24; }
+  .issue-card.LOW { background: rgba(52,211,153,0.06); border-color: var(--accent3); }
+  .issue-severity { font-family: var(--mono); font-size: 10px; letter-spacing: 1px; margin-bottom: 5px; }
+  .issue-card.HIGH .issue-severity { color: var(--danger); }
+  .issue-card.MEDIUM .issue-severity { color: #fbbf24; }
+  .issue-card.LOW .issue-severity { color: var(--accent3); }
+  .issue-text { font-size: 13px; color: var(--text); margin-bottom: 5px; }
+  .issue-fix { font-size: 12px; color: var(--text2); }
+  .issue-fix strong { color: var(--accent); }
+
+  /* ===== TOAST ===== */
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid var(--border2); border-radius: 10px; padding: 12px 16px; display: none; align-items: center; gap: 10px; box-shadow: 0 0 24px rgba(56,189,248,0.15), 0 8px 24px rgba(0,0,0,0.4); animation: toastIn 0.3s ease; z-index: 9999; min-width: 280px; }
+  @keyframes toastIn { from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);} }
+  .toast-dot { width: 8px; height: 8px; background: var(--accent3); border-radius: 50%; box-shadow: 0 0 8px var(--accent3); flex-shrink: 0; }
+  .toast-close { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 18px; margin-left: auto; line-height: 1; }
+
+  /* ===== LOADING ===== */
+  .loading { display: flex; align-items: center; gap: 8px; font-family: var(--mono); font-size: 11px; color: var(--text3); padding: 12px 0; }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">✉</div>
+    Emailhog
+    <span class="logo-version">v2.0</span>
+  </div>
+  <div class="header-right">
+    <div class="status-indicator">
+      <div class="status-dot"></div>
+      <span class="status-text">SMTP :2500</span>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="searchInput" placeholder="Search emails..." oninput="filterEmails()">
+    </div>
+    <button class="btn btn-compose" onclick="openComposer()">✎ Compose</button>
+    <button class="btn btn-danger" onclick="confirmDeleteAll()">⊗ Clear Inbox</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <span class="inbox-label">Inbox</span>
+      <span class="email-count" id="emailCount">0 emails</span>
+    </div>
+    <div class="email-list" id="emailList">
+      <div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:12px;font-family:var(--mono)">
+        Waiting for emails...
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <span class="smtp-badge">● LIVE</span>
+      <span>:2500 smtp · :8080 web</span>
+      <span style="margin-left:auto">Emailhog</span>
+    </div>
+  </div>
+
+  <!-- DETAIL PANEL -->
+  <div class="detail-panel" id="detailPanel">
+
+    <!-- EMPTY STATE -->
+<div class="empty-state" id="emptyState">
+
+  <!-- Animated inbox illustration -->
+<!-- Animated illustration — orbiting icons around @ center -->
+<div style="position:relative;width:140px;height:140px;margin-bottom:4px">
+
+    <!-- Outer glow -->
+    <div style="position:absolute;inset:-10px;border-radius:50%;
+        background:radial-gradient(circle,rgba(56,189,248,0.1),transparent 70%);
+        animation:glowPulse 3s ease-in-out infinite"></div>
+
+    <!-- Orbit ring dashed -->
+    <svg width="140" height="140" viewBox="0 0 140 140"
+        style="position:absolute;top:0;left:0;pointer-events:none">
+        <circle cx="70" cy="70" r="54" fill="none"
+            stroke="rgba(56,189,248,0.12)" stroke-width="1"
+            stroke-dasharray="4 4"/>
+    </svg>
+
+    <!-- Center circle with @ symbol -->
+    <div style="position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        width:72px;height:72px;border-radius:50%;
+        background:linear-gradient(135deg,var(--surface),var(--surface2));
+        border:1.5px solid rgba(56,189,248,0.3);
+        display:flex;align-items:center;justify-content:center;
+        animation:floatCenter 3s ease-in-out infinite;
+        overflow:hidden;box-shadow:0 0 24px rgba(56,189,248,0.12)">
+
+        <!-- Scanline sweep -->
+        <div style="position:absolute;width:100%;height:8px;
+            background:linear-gradient(transparent,rgba(56,189,248,0.07),transparent);
+            animation:scanline 3s linear infinite;pointer-events:none"></div>
+
+        <!-- Hog mascot SVG -->
+<svg width="38" height="38" viewBox="0 0 38 38" fill="none">
+    <!-- Face -->
+    <ellipse cx="19" cy="20" rx="13" ry="11"
+        fill="none" stroke="#38bdf8" stroke-width="1.5"/>
+    <!-- Left nostril -->
+    <ellipse cx="13" cy="20" rx="3" ry="3.5"
+        fill="rgba(56,189,248,0.15)" stroke="#38bdf8" stroke-width="1"/>
+    <!-- Right nostril -->
+    <ellipse cx="25" cy="20" rx="3" ry="3.5"
+        fill="rgba(56,189,248,0.15)" stroke="#38bdf8" stroke-width="1"/>
+    <!-- Left nostril dots -->
+    <circle cx="12.5" cy="19.5" r="1" fill="#38bdf8"/>
+    <circle cx="13.5" cy="21" r="1" fill="#38bdf8"/>
+    <!-- Right nostril dots -->
+    <circle cx="24.5" cy="19.5" r="1" fill="#38bdf8"/>
+    <circle cx="25.5" cy="21" r="1" fill="#38bdf8"/>
+    <!-- Smile -->
+    <path d="M14 28 Q19 31 24 28"
+        stroke="#38bdf8" stroke-width="1.5"
+        stroke-linecap="round" fill="none"/>
+    <!-- Head top -->
+    <circle cx="19" cy="10" r="3"
+        fill="none" stroke="#38bdf8" stroke-width="1.2"/>
+    <!-- Left ear -->
+    <line x1="17" y1="8" x2="15" y2="5"
+        stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round"/>
+    <!-- Right ear -->
+    <line x1="21" y1="8" x2="23" y2="5"
+        stroke="#38bdf8" stroke-width="1.2" stroke-linecap="round"/>
+</svg>
+    </div>
+
+    <!-- Orbit 1 — envelope icon (blue) -->
+    <div style="position:absolute;top:50%;left:50%;
+        animation:orbit1 4s linear infinite;transform-origin:0 0">
+        <div style="width:24px;height:24px;border-radius:6px;
+            background:var(--surface2);
+            border:1px solid rgba(56,189,248,0.4);
+            display:flex;align-items:center;justify-content:center;
+            margin-left:-12px;margin-top:-12px;
+            box-shadow:0 0 10px rgba(56,189,248,0.2)">
+            <svg width="13" height="10" viewBox="0 0 13 10" fill="none">
+                <rect x="0.5" y="0.5" width="12" height="9" rx="1.5"
+                    stroke="#38bdf8" stroke-width="1"/>
+                <path d="M0.5 2.5L6.5 6L12.5 2.5"
+                    stroke="#38bdf8" stroke-width="1" fill="none"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Orbit 2 — AI spark (purple) -->
+    <div style="position:absolute;top:50%;left:50%;
+        animation:orbit2 4s linear infinite;transform-origin:0 0">
+        <div style="width:24px;height:24px;border-radius:6px;
+            background:var(--surface2);
+            border:1px solid rgba(129,140,248,0.4);
+            display:flex;align-items:center;justify-content:center;
+            margin-left:-12px;margin-top:-12px;
+            box-shadow:0 0 10px rgba(129,140,248,0.2)">
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="none">
+                <path d="M6 1L7.2 4.8L11 6L7.2 7.2L6 11L4.8 7.2L1 6L4.8 4.8L6 1Z"
+                    stroke="#818cf8" stroke-width="1"
+                    fill="rgba(129,140,248,0.15)"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Orbit 3 — checkmark (green) -->
+    <div style="position:absolute;top:50%;left:50%;
+        animation:orbit3 4s linear infinite;transform-origin:0 0">
+        <div style="width:24px;height:24px;border-radius:6px;
+            background:var(--surface2);
+            border:1px solid rgba(52,211,153,0.4);
+            display:flex;align-items:center;justify-content:center;
+            margin-left:-12px;margin-top:-12px;
+            box-shadow:0 0 10px rgba(52,211,153,0.2)">
+            <svg width="13" height="13" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6.5L4.5 9L10 3"
+                    stroke="#34d399" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+    </div>
+
+</div>
+
+
+  <!-- Title -->
+  <div style="font-family:var(--mono);font-size:13px;font-weight:700;
+      color:var(--text2);letter-spacing:3px;margin-bottom:8px">
+    INBOX READY
+  </div>
+
+  <!-- Subtitle -->
+  <div style="font-size:13px;color:var(--text3);margin-bottom:20px;text-align:center;line-height:1.6;max-width:300px">
+    Select an email from the inbox to inspect it,<br>
+    or compose a new one to test your sandbox.
+  </div>
+
+
+  <!-- Compose CTA -->
+  <button onclick="openComposer()"
+      style="font-family:var(--mono);font-size:12px;font-weight:700;
+      padding:10px 24px;border-radius:8px;border:none;cursor:pointer;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      color:white;box-shadow:0 0 20px rgba(56,189,248,0.25);
+      transition:all 0.2s;letter-spacing:0.5px"
+      onmouseover="this.style.boxShadow='0 0 30px rgba(56,189,248,0.45)';this.style.transform='translateY(-1px)'"
+      onmouseout="this.style.boxShadow='0 0 20px rgba(56,189,248,0.25)';this.style.transform='translateY(0)'">
+    ✎ Compose New Email
+  </button>
+
+
+
+</div>
+
+    <!-- EMAIL DETAIL -->
+    <div class="email-detail" id="emailDetail" style="display:none">
+
+      <div class="detail-header">
+        <div class="detail-subject" id="detailSubject">—</div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">FROM</span>
+            <span class="meta-value" id="detailFrom">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">TO</span>
+            <span class="meta-value" id="detailTo">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">TIME</span>
+            <span class="meta-value" id="detailTime">—</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">ID</span>
+            <span class="meta-value" id="detailId" style="font-family:var(--mono);font-size:10px">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-bar" id="tabBar">
+        <button class="tab-btn active" onclick="switchTab('preview',this)">⬜ Preview</button>
+        <button class="tab-btn" onclick="switchTab('headers',this)">≡ Headers</button>
+        <button class="tab-btn" onclick="switchTab('smtp',this)">⌁ SMTP Log</button>
+        <button class="tab-btn" onclick="switchTab('links',this)">⛓ Links</button>
+        <button class="tab-btn" onclick="switchTab('ai',this)">✦ AI Analysis</button>
+        <button class="tab-btn" onclick="switchTab('size',this)">⊞ Size</button>
+      </div>
+
+      <div class="action-bar">
+        <div class="device-toggles">
+          <button class="dev-btn active" onclick="setDevice(375,this)">📱 Mobile</button>
+          <button class="dev-btn" onclick="setDevice(768,this)">⬛ Tablet</button>
+          <button class="dev-btn" onclick="setDevice(1100,this)">🖥 Desktop</button>
+        </div>
+        <div class="spacer"></div>
+        <button class="action-btn" onclick="runLinkCheck()">⛓ Check Links</button>
+        <button class="action-btn ai" onclick="runAI()">✦ Analyse with AI</button>
+        <button class="action-btn del" onclick="deleteCurrentEmail()">⊗ Delete</button>
+      </div>
+
+      <!-- PREVIEW TAB -->
+
+    <div id="tab-preview" class="preview-wrap" style="background:var(--surface2);padding:16px;overflow-y:auto">
+  <div style="display:flex;flex-direction:column;align-items:center;width:100%;gap:10px">
+
+    <!-- Device label -->
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);
+        letter-spacing:2px;text-transform:uppercase" id="deviceLabel">
+      MOBILE — 375px
+    </div>
+
+    <!-- Email client shell -->
+    <div class="iframe-shell" id="deviceShell">
+
+      <!-- Fake email client top bar -->
+      <div class="iframe-topbar">
+        <div class="dot dot-red"></div>
+        <div class="dot dot-yellow"></div>
+        <div class="dot dot-green"></div>
+        <span class="topbar-label" id="deviceShellLabel">iPhone Mail — 375px</span>
+      </div>
+
+      <!-- Fake email client header — From/Subject bar -->
+      <div id="emailClientHeader" style="background:white;border-bottom:1px solid #e5e7eb;
+          padding:12px 16px;font-family:Arial,sans-serif">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="width:36px;height:36px;border-radius:50%;
+              background:linear-gradient(135deg,#6366f1,#8b5cf6);
+              display:flex;align-items:center;justify-content:center;
+              color:white;font-weight:bold;font-size:14px;flex-shrink:0"
+              id="senderAvatar">?</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px;color:#111;
+                white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                id="previewFrom">—</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:1px">
+              to <span id="previewTo">—</span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:#9ca3af;flex-shrink:0"
+              id="previewTime">—</div>
+        </div>
+        <div style="font-size:14px;font-weight:600;color:#111;
+            line-height:1.4" id="previewSubject">—</div>
+      </div>
+
+      <!-- Actual email body -->
+      <div class="iframe-body">
+        <iframe id="previewFrame"
+    sandbox="allow-same-origin allow-scripts allow-downloads allow-top-navigation"
+    referrerpolicy="same-origin"
+    style="width:100%;border:none;min-height:200px;display:block;
+    height:200px;transition:height 0.2s ease">
+</iframe>
+      </div>
+
+      
+
+    </div>
+
+  </div>
+</div>
+
+
+      <!-- HEADERS TAB -->
+      <div id="tab-headers" class="headers-wrap" style="display:none">
+        <div id="headersContent"></div>
+      </div>
+
+      <!-- SMTP LOG TAB -->
+<div id="tab-smtp" class="smtp-wrap" style="display:none">
+  <div id="smtpContent"></div>
+</div>
+
+      <!-- LINKS TAB -->
+      <div id="tab-links" style="display:none;flex:1;overflow-y:auto">
+        <div class="link-results" id="linkContent">
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text3);padding:20px 0">
+            Click "Check Links" to scan all URLs in this email.
+          </div>
+        </div>
+      </div>
+
+      <!-- AI ANALYSIS TAB -->
+      <div id="tab-ai" style="display:none;flex:1;overflow-y:auto">
+        <div class="ai-result-wrap" id="aiContent">
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text3);padding:20px 0">
+            Click "Analyse with AI" to get a spam score and improvement suggestions.
+          </div>
+        </div>
+      </div>
+
+      <!-- SIZE ANALYSIS TAB -->
+<div id="tab-size" style="display:none;flex:1;overflow-y:auto;padding:20px 24px">
+    <div id="sizeTabContent">
+        <div style="font-family:var(--mono);font-size:12px;
+            color:var(--text3);padding:20px 0">
+            Open an email to see size analysis.
+        </div>
+    </div>
+</div>
+
+    </div>
+  </div>
+</div>
+<!-- COMPOSER MODAL -->
+
+    <div id="composerOverlay" style="display:none;position:fixed;inset:0;
+    background:rgba(0,0,0,0.7);z-index:1000;
+    justify-content:center;align-items:flex-start;
+    padding:20px 0;overflow-y:auto;backdrop-filter:blur(4px)">
+
+    <div style="background:var(--surface);border:1px solid var(--border2);
+    border-radius:14px;width:900px;max-width:96vw;
+    display:flex;flex-direction:column;
+    box-shadow:0 24px 60px rgba(0,0,0,0.5);
+    margin:auto">
+
+    <!-- Composer Header -->
+    <div style="padding:18px 24px;border-bottom:1px solid var(--border);
+        display:flex;align-items:center;justify-content:space-between;
+        flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:28px;height:28px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+            border-radius:7px;display:flex;align-items:center;justify-content:center;
+            font-size:13px;box-shadow:0 0 12px rgba(56,189,248,0.3)">✎</div>
+        <span style="font-family:var(--mono);font-weight:700;font-size:14px">
+          New Email — Compose
+        </span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--accent);
+            background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.2);
+            padding:2px 8px;border-radius:4px">
+          → sandbox
+        </span>
+      </div>
+      <button onclick="closeComposer()"
+          style="background:none;border:none;color:var(--text3);
+          cursor:pointer;font-size:20px;line-height:1;
+          transition:color 0.2s"
+          onmouseover="this.style.color='var(--text)'"
+          onmouseout="this.style.color='var(--text3)'">×</button>
+    </div>
+
+    <!-- Composer Fields -->
+    <div style="padding:16px 24px;border-bottom:1px solid var(--border);
+        display:flex;flex-direction:column;gap:10px;flex-shrink:0">
+
+      <!-- From -->
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-family:var(--mono);font-size:11px;
+            color:var(--text3);width:60px;flex-shrink:0;text-align:right">
+          FROM
+        </span>
+        <input id="cFrom" type="email"
+            placeholder="sender@yourapp.com"
+            value="developer@emailhog.local"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);
+            color:var(--text);font-family:var(--mono);font-size:12px;
+            padding:8px 12px;border-radius:7px;outline:none;transition:border-color 0.2s"
+            onfocus="this.style.borderColor='var(--accent)'"
+            onblur="this.style.borderColor='var(--border)'">
+      </div>
+
+      <!-- To -->
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-family:var(--mono);font-size:11px;
+            color:var(--text3);width:60px;flex-shrink:0;text-align:right">
+          TO
+        </span>
+        <input id="cTo" type="email"
+            placeholder="recipient@test.com"
+            value="inbox@emailhog.local"
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);
+            color:var(--text);font-family:var(--mono);font-size:12px;
+            padding:8px 12px;border-radius:7px;outline:none;transition:border-color 0.2s"
+            onfocus="this.style.borderColor='var(--accent)'"
+            onblur="this.style.borderColor='var(--border)'">
+      </div>
+
+      <!-- Subject -->
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-family:var(--mono);font-size:11px;
+            color:var(--text3);width:60px;flex-shrink:0;text-align:right">
+          SUBJECT
+        </span>
+        <input id="cSubject" type="text"
+            placeholder="Enter email subject..."
+            style="flex:1;background:var(--surface2);border:1px solid var(--border);
+            color:var(--text);font-family:var(--mono);font-size:12px;
+            padding:8px 12px;border-radius:7px;outline:none;transition:border-color 0.2s"
+            onfocus="this.style.borderColor='var(--accent)'"
+            onblur="this.style.borderColor='var(--border)'">
+      </div>
+    </div>
+
+    <!-- Body Editor Tabs -->
+    <div style="display:flex;border-bottom:1px solid var(--border);
+        padding:0 24px;gap:2px;flex-shrink:0;background:var(--surface)">
+      <button class="tab-btn active" id="editorTabRich"
+          onclick="switchEditorTab('rich')">
+        ✦ Rich Text
+      </button>
+      <button class="tab-btn" id="editorTabHtml"
+          onclick="switchEditorTab('html')">
+        &lt;/&gt; HTML Source
+      </button>
+      <button class="tab-btn" id="editorTabPreview"
+          onclick="switchEditorTab('preview')">
+        ⬜ Preview
+      </button>
+    </div>
+
+    <!-- Rich Text Toolbar -->
+    <div id="richToolbar" style="padding:8px 24px;border-bottom:1px solid var(--border);
+        display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0;background:var(--surface2)">
+      <button onclick="formatDoc('bold')" title="Bold"
+          style="font-family:var(--mono);font-size:12px;font-weight:700;
+          padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+          background:var(--surface3);color:var(--text);cursor:pointer">B</button>
+      <button onclick="formatDoc('italic')" title="Italic"
+          style="font-family:var(--mono);font-size:12px;font-style:italic;
+          padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+          background:var(--surface3);color:var(--text);cursor:pointer">I</button>
+      <button onclick="formatDoc('underline')" title="Underline"
+          style="font-family:var(--mono);font-size:12px;text-decoration:underline;
+          padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+          background:var(--surface3);color:var(--text);cursor:pointer">U</button>
+      <div style="width:1px;background:var(--border);margin:0 4px"></div>
+      <button onclick="formatDoc('insertUnorderedList')" title="Bullet List"
+          style="font-family:var(--mono);font-size:12px;
+          padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+          background:var(--surface3);color:var(--text);cursor:pointer">• List</button>
+      <button onclick="formatDoc('insertOrderedList')" title="Numbered List"
+          style="font-family:var(--mono);font-size:12px;
+          padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+          background:var(--surface3);color:var(--text);cursor:pointer">1. List</button>
+      <div style="width:1px;background:var(--border);margin:0 4px"></div>
+      <select onchange="formatDoc('fontSize', this.value);this.value=''"
+          style="font-family:var(--mono);font-size:11px;
+          background:var(--surface3);color:var(--text);
+          border:1px solid var(--border);border-radius:5px;padding:4px 6px;cursor:pointer">
+        <option value="">Size</option>
+        <option value="1">Small</option>
+        <option value="3">Normal</option>
+        <option value="5">Large</option>
+        <option value="7">Huge</option>
+      </select>
+      <select onchange="formatDoc('foreColor', this.value);this.value=''"
+          style="font-family:var(--mono);font-size:11px;
+          background:var(--surface3);color:var(--text);
+          border:1px solid var(--border);border-radius:5px;padding:4px 6px;cursor:pointer">
+        <option value="">Color</option>
+        <option value="#ef4444">Red</option>
+        <option value="#3b82f6">Blue</option>
+        <option value="#22c55e">Green</option>
+        <option value="#f59e0b">Orange</option>
+        <option value="#8b5cf6">Purple</option>
+        <option value="#000000">Black</option>
+      </select>
+      <div style="width:1px;background:var(--border);margin:0 4px"></div>
+      <button onclick="insertLink()" title="Insert Link"
+          style="font-family:var(--mono);font-size:11px;
+          padding:4px 10px;border-radius:5px;border:1px solid var(--border);
+          background:var(--surface3);color:var(--accent);cursor:pointer">🔗 Link</button>
+
+    <button onclick="triggerImageInsert()" title="Insert Image"
+    style="font-family:var(--mono);font-size:11px;
+    padding:4px 10px;border-radius:5px;
+    border:1px solid var(--border);background:var(--surface3);
+    color:var(--accent3);cursor:pointer">
+    🖼 Image
+</button>
+<input type="file" accept="image/*" id="imageFileInput"
+    style="display:none"
+    onchange="handleImageFileSelect(this)">
+    </div>
+
+        <!-- Editor Area -->
+<div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;min-height:360px">
+
+      <!-- Rich Text Editor -->
+
+    <div id="editorRich"
+    contenteditable="true"
+    style="flex:1;padding:20px 24px;overflow-y:auto;
+    color:#1a1a1a;background:white;font-family:Arial,sans-serif;
+    font-size:14px;line-height:1.7;outline:none;min-height:360px;
+    height:100%"
+    placeholder="Write your email here..."
+    ondrop="handleImageDrop(event)"
+    onpaste="handleImagePaste(event)">>
+
+        <p>Hi there,</p>
+        <p>Write your email content here. You can use the toolbar above to format text, add links, and more.</p>
+        <p>Best regards,<br>Your Name</p>
+      </div>
+
+      <!-- HTML Source Editor -->
+    <textarea id="editorHtml"
+    style="display:none;flex:1;padding:16px 24px;
+    background:#0d1117;color:#e6edf3;
+    font-family:var(--mono);font-size:12px;
+    border:none;outline:none;resize:none;line-height:1.7;
+    min-height:360px;height:100%"
+    placeholder="Paste or write your HTML email code here..."></textarea>
+
+      <!-- Preview -->
+      <div id="editorPreview"
+          style="display:none;flex:1;overflow-y:auto;background:white">
+        <iframe id="composerPreviewFrame"
+            style="width:100%;height:100%;border:none;min-height:360px">
+        </iframe>
+      </div>
+
+    </div>
+
+    <!-- Attachment + Footer -->
+    <div style="padding:12px 24px;border-top:1px solid var(--border);
+        flex-shrink:0;background:var(--surface)">
+
+      <!-- Attachment list -->
+      <div id="attachmentList" style="margin-bottom:10px;display:flex;
+          flex-wrap:wrap;gap:6px"></div>
+
+      <!-- Bottom bar -->
+      <div style="display:flex;align-items:center;gap:10px">
+
+        <!-- Attach file button -->
+        <label style="font-family:var(--mono);font-size:11px;
+            padding:7px 14px;border-radius:7px;
+            border:1px solid var(--border2);background:var(--surface3);
+            color:var(--text2);cursor:pointer;transition:all 0.2s;
+            display:flex;align-items:center;gap:6px"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+            onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">
+          📎 Attach File
+          <input type="file" id="attachInput" multiple
+              style="display:none" onchange="handleAttachments(this)">
+        </label>
+
+        <span style="font-family:var(--mono);font-size:10px;
+            color:var(--text3)" id="attachCount">No attachments</span>
+
+        <div style="flex:1"></div>
+
+        <!-- Cancel -->
+        <button onclick="closeComposer()"
+            style="font-family:var(--mono);font-size:12px;
+            padding:8px 18px;border-radius:7px;
+            border:1px solid var(--border);background:transparent;
+            color:var(--text2);cursor:pointer;transition:all 0.2s"
+            onmouseover="this.style.background='var(--surface2)'"
+            onmouseout="this.style.background='transparent'">
+          Cancel
+        </button>
+
+        <!-- Send button -->
+        <button onclick="sendComposedEmail()" id="sendBtn"
+            style="font-family:var(--mono);font-size:12px;font-weight:700;
+            padding:8px 24px;border-radius:7px;border:none;
+            background:linear-gradient(135deg,var(--accent),var(--accent2));
+            color:white;cursor:pointer;transition:all 0.2s;
+            box-shadow:0 0 16px rgba(56,189,248,0.3)">
+          ✦ Send to Sandbox
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="toast-dot"></div>
+  <div style="flex:1">
+    <div style="font-weight:600;font-size:13px" id="toastTitle">New email</div>
+    <div style="font-size:11px;color:var(--text2);margin-top:2px" id="toastSub"></div>
+  </div>
+  <button class="toast-close" onclick="hideToast()">×</button>
+</div>
+
+<script>
+  let allEmails = [];
+  let currentOpenId = null;
+  let toastTimer = null;
+  let initialLoadDone = false;
+
+  // ===== FETCH EMAILS =====
+ async function fetchEmails(query = '') {
+    try {
+        const url = query ? `/api/emails?query=${encodeURIComponent(query)}` : '/api/emails';
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const emails = await res.json();
+        const prevCount = allEmails.length;
+        allEmails = emails;
+        renderList(emails);
+
+        // Skip toast on initial page load — only show for genuinely new emails
+        if (!initialLoadDone) {
+            initialLoadDone = true;
+            return;
+        }
+
+        // Show toast only when a new email arrives (not on search or refresh)
+        if (!query && emails.length > prevCount) {
+            const newest = emails[0];
+            if (newest) showToast(newest.from || 'Unknown', newest.subject || '(No Subject)');
+        }
+    } catch (e) { /* server not running yet */ }
+}
+
+  // ===== RENDER EMAIL LIST =====
+  function renderList(emails) {
+    const list = document.getElementById('emailList');
+    const count = document.getElementById('emailCount');
+    count.textContent = emails.length + ' email' + (emails.length !== 1 ? 's' : '');
+
+    if (!emails.length) {
+      list.innerHTML = '<div style="padding:32px 16px;text-align:center;color:var(--text3);font-size:12px;font-family:var(--mono)">No emails found</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    emails.forEach(email => {
+      const row = document.createElement('div');
+      row.className = 'email-row' + (email.id === currentOpenId ? ' active' : '');
+      const time = email.receivedAt ? new Date(email.receivedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+      const hasHtml = email.body && email.body.includes('<html');
+      const hasAttach = email.body && email.body.includes('download=');
+
+
+      // Calculate size badges
+const htmlKB = email.htmlBodySizeBytes
+    ? Math.round(email.htmlBodySizeBytes / 1024) : 0;
+const attachKB = email.attachmentSizeBytes
+    ? Math.round(email.attachmentSizeBytes / 1024) : 0;
+const totalKB = email.sizeBytes
+    ? Math.round(email.sizeBytes / 1024) : 0;
+
+// HTML body size zone
+let htmlBadge = '';
+if (htmlKB > 0) {
+    let hColor, hIcon, hLabel;
+    if (htmlKB <= 75) {
+        hColor = 'rgba(52,211,153,0.1);color:#34d399;border:1px solid rgba(52,211,153,0.2)';
+        hIcon = '✓'; hLabel = htmlKB + 'KB';
+    } else if (htmlKB <= 102) {
+        hColor = 'rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2)';
+        hIcon = '⚠'; hLabel = htmlKB + 'KB';
+    } else if (htmlKB <= 150) {
+        hColor = 'rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.2)';
+        hIcon = '✗'; hLabel = htmlKB + 'KB';
+    } else {
+        hColor = 'rgba(220,38,38,0.15);color:#ef4444;border:1px solid rgba(220,38,38,0.3)';
+        hIcon = '✗✗'; hLabel = htmlKB + 'KB';
+    }
+    htmlBadge = `<span class="row-badge" title="HTML body size"
+        style="background:${hColor};font-family:var(--mono);
+        font-size:9px;padding:2px 6px;border-radius:4px">
+        ${hIcon} ${hLabel} HTML
+    </span>`;
+}
+
+// Attachment size zone
+let attachBadge = '';
+if (attachKB > 0) {
+    let aColor, aIcon, aLabel;
+    const attachMB = attachKB / 1024;
+
+    if (attachMB < 10) {
+        aColor = 'rgba(129,140,248,0.1);color:#818cf8;border:1px solid rgba(129,140,248,0.2)';
+        aIcon = '📎'; aLabel = attachKB > 1024 ? attachMB.toFixed(1) + 'MB' : attachKB + 'KB';
+    } else if (attachMB < 15) {
+        aColor = 'rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2)';
+        aIcon = '📎⚠'; aLabel = attachMB.toFixed(1) + 'MB';
+    } else if (attachMB < 25) {
+        aColor = 'rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.2)';
+        aIcon = '📎✗'; aLabel = attachMB.toFixed(1) + 'MB';
+    } else {
+        aColor = 'rgba(220,38,38,0.15);color:#ef4444;border:1px solid rgba(220,38,38,0.3)';
+        aIcon = '📎✗✗'; aLabel = attachMB.toFixed(1) + 'MB';
+    }
+    attachBadge = `<span class="row-badge" title="Attachment size"
+        style="background:${aColor};font-family:var(--mono);
+        font-size:9px;padding:2px 6px;border-radius:4px">
+        ${aIcon} ${aLabel}
+    </span>`;
+}
+
+row.innerHTML = `
+    <div class="row-top">
+      <div class="row-sender">${escHtml(email.from || 'unknown')}</div>
+      <div class="row-time">${time}</div>
+    </div>
+    <div class="row-subject">${escHtml(email.subject || '(No Subject)')}</div>
+    <div style="margin-top:5px;display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+      ${hasHtml ? '<span class="row-badge badge-html">HTML</span>' : ''}
+      ${hasAttach ? '<span class="row-badge badge-attach">ATTACH</span>' : ''}
+      ${htmlBadge}
+      ${attachBadge}
+    </div>`;
+
+
+      row.onclick = () => openEmail(email.id);
+      list.appendChild(row);
+    });
+  }
+
+  // ===== OPEN EMAIL =====
+  function openEmail(id) {
+    const email = allEmails.find(e => e.id === id);
+    if (!email) return;
+    currentOpenId = id;
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('emailDetail').style.display = 'flex';
+
+    document.getElementById('detailSubject').textContent = email.subject || '(No Subject)';
+    document.getElementById('detailFrom').textContent = email.from || '—';
+    document.getElementById('detailTo').textContent = email.to || '—';
+    document.getElementById('detailTime').textContent = email.receivedAt ? new Date(email.receivedAt).toLocaleString() : '—';
+    document.getElementById('detailId').textContent = email.id ? email.id.substring(0,20)+'...' : '—';
+
+document.getElementById('previewFrame').onload = function() {
+    resizePreviewFrame();
+    // Run again after images load
+    setTimeout(resizePreviewFrame, 500);
+    setTimeout(resizePreviewFrame, 1500);
+};
+
+
+    // Load email into preview iframe with proper email client styling
+const frame = document.getElementById('previewFrame');
+
+// Clean up body for new GridFS URL format
+let emailBody = email.body || '';
+
+// Fix relative GridFS URLs to absolute so iframe can load them
+emailBody = emailBody.replace(
+    /src='\/api\/attachments\//g,
+    "src='http://localhost:8080/api/attachments/"
+);
+emailBody = emailBody.replace(
+    /src="\/api\/attachments\//g,
+    'src="http://localhost:8080/api/attachments/'
+);
+
+// For download links — open in parent window instead of iframe
+// This bypasses iframe sandbox download restriction
+emailBody = emailBody.replace(
+    /href='\/api\/attachments\/([^']+)' download='([^']+)'/g,
+    "href='http://localhost:8080/api/attachments/$1' download='$2' target='_parent'"
+);
+emailBody = emailBody.replace(
+    /href="\/api\/attachments\/([^"]+)" download="([^"]+)"/g,
+    'href="http://localhost:8080/api/attachments/$1" download="$2" target="_parent"'
+);
+
+const emailHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    font-family: -apple-system, 'Segoe UI', Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.65;
+    color: #1f2937;
+    background: #ffffff;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    padding: 20px 24px 32px;
+    background: #ffffff;
+    word-break: break-word;
+  }
+
+  /* Typography */
+  p {
+    margin: 0 0 14px 0;
+    line-height: 1.65;
+  }
+
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 14px; line-height: 1.3; color: #111827; }
+  h2 { font-size: 18px; font-weight: 700; margin: 0 0 12px; line-height: 1.3; color: #111827; }
+  h3 { font-size: 15px; font-weight: 600; margin: 0 0 10px; line-height: 1.3; color: #111827; }
+
+  a { color: #2563eb; text-decoration: underline; }
+  a:hover { color: #1d4ed8; }
+
+  strong, b { font-weight: 600; color: #111827; }
+
+  ul, ol {
+    margin: 0 0 14px 0;
+    padding-left: 22px;
+  }
+
+  li { margin-bottom: 6px; line-height: 1.6; }
+
+/* Images — constrained like Gmail */
+img {
+    max-width: 480px !important;
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 4px;
+    display: block;
+}
+
+  /* Dividers */
+  hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 20px 0;
+  }
+
+  /* Tables — common in HTML emails */
+  table {
+    border-collapse: collapse;
+    max-width: 100%;
+  }
+
+  td, th {
+    vertical-align: top;
+    padding: 8px;
+  }
+
+  /* Buttons inside emails */
+  .email-btn {
+    display: inline-block;
+    padding: 10px 22px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  /* Blockquotes */
+  blockquote {
+    margin: 12px 0;
+    padding: 10px 16px;
+    border-left: 3px solid #d1d5db;
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  /* Code */
+  code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #dc2626;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: #f9fafb; }
+  ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+</style>
+</head>
+<body>${emailBody}</body>
+</html>`;
+frame.srcdoc = emailHtml;
+
+// Update the fake email client header
+const fromName = (email.from || '—').split('@')[0];
+document.getElementById('previewFrom').textContent = email.from || '—';
+document.getElementById('previewTo').textContent = email.to || '—';
+document.getElementById('previewSubject').textContent = email.subject || '(No Subject)';
+document.getElementById('previewTime').textContent = email.receivedAt
+    ? new Date(email.receivedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})
+    : '—';
+document.getElementById('senderAvatar').textContent =
+    fromName.charAt(0).toUpperCase();
+   
+    // Reset tabs and link/ai content
+    switchTab('preview', document.querySelector('.tab-btn'));
+    document.getElementById('linkContent').innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--text3);padding:20px 0">Click "Check Links" to scan all URLs in this email.</div>';
+    document.getElementById('aiContent').innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--text3);padding:20px 0">Click "Analyse with AI" to get spam score and suggestions.</div>';
+
+    renderList(allEmails);
+  }
+
+  // ===== TABS =====
+function switchTab(tab, btn) {
+    ['preview','headers','smtp','links','ai','size'].forEach(t => {
+        const el = document.getElementById('tab-'+t);
+        if (el) el.style.display = 'none';
+    });
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    const active = document.getElementById('tab-'+tab);
+    if (active) active.style.display = tab === 'preview' ? 'flex' : 'block';
+    if (btn) btn.classList.add('active');
+
+    // Load data when tab is opened
+    if (tab === 'headers' && currentOpenId) loadHeaders();
+    if (tab === 'smtp' && currentOpenId) loadSmtpLog();
+    if (tab === 'size' && currentOpenId) loadSizeAnalysis();
+}
+
+ // ===== DEVICE PREVIEW =====
+const deviceProfiles = {
+    375:  { label: 'MOBILE — 375px',   shellLabel: 'iPhone Mail — 375px',  height: '420px' },
+    768:  { label: 'TABLET — 768px',   shellLabel: 'iPad Mail — 768px',    height: '650px' },
+    1100: { label: 'DESKTOP — 1100px', shellLabel: 'Gmail — 900px',       height: '700px' }
+};
+
+// Auto resize iframe height to fit full content including attachments
+function resizePreviewFrame() {
+    const frame = document.getElementById('previewFrame');
+    if (!frame) return;
+    try {
+        const body = frame.contentDocument.body;
+        const html = frame.contentDocument.documentElement;
+        const height = Math.max(
+            body.scrollHeight, body.offsetHeight,
+            html.clientHeight, html.scrollHeight, html.offsetHeight
+        );
+        // Set iframe height to exact content height
+        frame.style.height = (height + 10) + 'px';
+        // Set shell height to match content — no empty space
+        document.getElementById('deviceShell').style.height = 'auto';
+    } catch(e) {}
+}
+
+function setDevice(width, btn) {
+    const profile = deviceProfiles[width];
+
+
+    // Resize the email shell — set BOTH width and maxWidth
+    const shell = document.getElementById('deviceShell');
+    shell.style.width = width + 'px';
+
+    // Update labels
+    document.getElementById('deviceLabel').textContent = profile.label;
+    document.getElementById('deviceShellLabel').textContent = profile.shellLabel;
+
+    // Update iframe height
+    resizePreviewFrame();
+
+    // Update active button
+    document.querySelectorAll('.dev-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}
+
+  // ===== HEADERS =====
+const CRITICAL_HEADERS = ['from','to','subject','date','reply-to','return-path'];
+const TECHNICAL_HEADERS = ['message-id','mime-version','content-type','content-transfer-encoding','content-disposition'];
+
+async function loadHeaders() {
+    if (!currentOpenId) return;
+    const container = document.getElementById('headersContent');
+    container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading headers...</div>';
+
+    try {
+        const res = await fetch(`/api/emails/${currentOpenId}/headers`);
+        if (!res.ok) throw new Error('Failed to load headers');
+        const headers = await res.json();
+
+        const critical = [];
+        const technical = [];
+        const custom = [];
+
+        Object.entries(headers).forEach(([name, value]) => {
+            const lower = name.toLowerCase();
+            if (CRITICAL_HEADERS.includes(lower)) {
+                critical.push([name, value]);
+            } else if (TECHNICAL_HEADERS.includes(lower)) {
+                technical.push([name, value]);
+            } else {
+                custom.push([name, value]);
+            }
+        });
+
+        let html = '';
+
+        if (critical.length) {
+            html += `<div class="header-section">⬤ Critical Headers</div>`;
+            critical.forEach(([k, v]) => {
+                html += `<div class="header-row critical">
+                    <div class="header-key">${escHtml(k)}</div>
+                    <div class="header-val">${escHtml(v)}</div>
+                </div>`;
+            });
+        }
+
+        if (technical.length) {
+            html += `<div class="header-section" style="margin-top:16px">⬤ Technical Headers</div>`;
+            technical.forEach(([k, v]) => {
+                html += `<div class="header-row">
+                    <div class="header-key">${escHtml(k)}</div>
+                    <div class="header-val">${escHtml(v)}</div>
+                </div>`;
+            });
+        }
+
+        if (custom.length) {
+            html += `<div class="header-section" style="margin-top:16px">⬤ Custom / X-Headers</div>`;
+            custom.forEach(([k, v]) => {
+                html += `<div class="header-row" style="opacity:0.7">
+                    <div class="header-key" style="color:var(--text3)">${escHtml(k)}</div>
+                    <div class="header-val">${escHtml(v)}</div>
+                </div>`;
+            });
+        }
+
+        if (!html) {
+            html = '<div style="padding:20px;font-family:var(--mono);font-size:12px;color:var(--text3)">No headers found for this email.</div>';
+        }
+
+        html += `<div style="padding:14px 12px;font-family:var(--mono);font-size:10px;color:var(--text3);border-top:1px solid var(--border);margin-top:16px">
+            Total headers: ${Object.keys(headers).length}
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        container.innerHTML = '<div style="padding:20px;font-family:var(--mono);font-size:12px;color:var(--danger)">Failed to load headers.</div>';
+    }
+}
+
+// ===== SMTP LOG =====
+async function loadSmtpLog() {
+
+
+    if (!currentOpenId) return;
+    const container = document.getElementById('smtpContent');
+    container.innerHTML = '<div class="loading"><div class="spinner"></div>Loading SMTP log...</div>';
+
+    try {
+        const res = await fetch(`/api/emails/${currentOpenId}/smtp-log`);
+        if (!res.ok) throw new Error('Failed');
+        const logs = await res.json();
+
+        if (!logs.length) {
+            container.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--text3);padding:20px 0">No SMTP log found for this email.</div>';
+            return;
+        }
+
+        // Header
+        let html = `<div style="font-family:var(--mono);font-size:10px;color:var(--text3);
+            letter-spacing:2px;text-transform:uppercase;padding:0 0 12px 0;
+            border-bottom:1px solid var(--border);margin-bottom:12px">
+            SMTP Session — ${logs.length} lines recorded
+        </div>`;
+
+        logs.forEach(log => {
+            const isClient = log.direction === 'CLIENT';
+            const isError = log.error;
+            const dirColor = isError ? 'var(--danger)' : isClient ? 'var(--accent)' : 'var(--accent3)';
+            const dirLabel = isClient ? 'C →' : 'S ←';
+            const msgColor = isError ? 'var(--danger)' : 'var(--text2)';
+
+            html += `<div class="smtp-line ${isError ? 'error' : ''}">
+                <span style="font-family:var(--mono);font-size:10px;color:var(--text3);
+                    min-width:80px;flex-shrink:0">${log.timestamp}</span>
+                <span style="font-family:var(--mono);font-size:12px;color:${dirColor};
+                    min-width:36px;flex-shrink:0;font-weight:600">${dirLabel}</span>
+                <span style="font-family:var(--mono);font-size:12px;color:${msgColor};
+                    word-break:break-all">${escHtml(log.message)}</span>
+            </div>`;
+        });
+
+        // Summary footer
+        const errors = logs.filter(l => l.error).length;
+        const statusColor = errors > 0 ? 'var(--danger)' : 'var(--accent3)';
+        const statusText = errors > 0 ? `${errors} error(s) detected` : 'Session completed successfully';
+
+        html += `<div style="margin-top:16px;padding:10px 14px;border-radius:6px;
+            background:${errors > 0 ? 'rgba(248,113,113,0.06)' : 'rgba(52,211,153,0.06)'};
+            border:1px solid ${errors > 0 ? 'rgba(248,113,113,0.2)' : 'rgba(52,211,153,0.2)'};
+            font-family:var(--mono);font-size:11px;color:${statusColor}">
+            ● ${statusText}
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch (e) {
+        container.innerHTML = '<div style="font-family:var(--mono);font-size:12px;color:var(--danger);padding:20px 0">Failed to load SMTP log.</div>';
+    }
+}
+
+
+// ===== SIZE ANALYSIS =====
+function loadSizeAnalysis() {
+    if (!currentOpenId) return;
+    const email = allEmails.find(e => e.id === currentOpenId);
+    if (!email) return;
+
+    const htmlKB = email.htmlBodySizeBytes
+        ? Math.round(email.htmlBodySizeBytes / 1024) : 0;
+    const attachKB = email.attachmentSizeBytes
+        ? Math.round(email.attachmentSizeBytes / 1024) : 0;
+    const totalKB = email.sizeBytes
+        ? Math.round(email.sizeBytes / 1024) : 0;
+    const attachMB = attachKB / 1024;
+
+    // HTML body status
+    let htmlStatus, htmlColor, htmlAdvice;
+    if (htmlKB <= 75) {
+        htmlStatus = '✓ Excellent'; htmlColor = '#34d399';
+        htmlAdvice = 'Ideal size — safe for all email clients including Gmail, Outlook and Apple Mail.';
+    } else if (htmlKB <= 102) {
+        htmlStatus = '⚠ Near Gmail limit'; htmlColor = '#fbbf24';
+        htmlAdvice = 'Approaching Gmail 102KB clip limit. Consider reducing HTML content or inline images.';
+    } else if (htmlKB <= 150) {
+        htmlStatus = '✗ Gmail will clip'; htmlColor = '#f87171';
+        htmlAdvice = 'Gmail hides content past this point behind "View entire message". Footer, unsubscribe links and legal text will be hidden from users.';
+    } else {
+        htmlStatus = '✗ Spam risk'; htmlColor = '#ef4444';
+        htmlAdvice = 'Body over 150KB — spam filters will flag this. Significantly reduce HTML content.';
+    }
+
+    // Attachment status
+    let attachStatus, attachColor, attachAdvice;
+    if (attachKB === 0) {
+        attachStatus = '— None'; attachColor = 'var(--text3)';
+        attachAdvice = 'No attachments in this email.';
+    } else if (attachMB < 10) {
+        attachStatus = '✓ Safe'; attachColor = '#34d399';
+        attachAdvice = 'Well within all provider limits. No risk of bounce.';
+    } else if (attachMB < 15) {
+        attachStatus = '⚠ Warning'; attachColor = '#fbbf24';
+        attachAdvice = 'Getting heavy —  may fail on some mail servers. Consider compressing or hosting externally.';
+    } else if (attachMB < 25) {
+        attachStatus = '✗ Very large'; attachColor = '#f87171';
+        attachAdvice = 'Approaching provider limits (Gmail 25MB, Outlook 20MB). High risk of bounce.';
+    } else {
+        attachStatus = '✗ Will bounce'; attachColor = '#ef4444';
+        attachAdvice = 'Exceeds all major provider limits. Email will be rejected. Use a cloud storage link instead.';
+    }
+
+    const html = `
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);
+        letter-spacing:2px;margin-bottom:16px">
+        EMAIL SIZE ANALYSIS — DUAL METRIC
+    </div>
+
+    <!-- HTML Body card -->
+    <div style="border:1px solid var(--border);border-radius:10px;
+        overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--surface2);padding:10px 16px;
+            border-bottom:1px solid var(--border);
+            display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:10px;letter-spacing:1px;color:var(--text3)">
+                HTML BODY SIZE
+            </span>
+            <span style="font-size:11px;color:var(--text3)">
+                Gmail clips at 102KB
+            </span>
+        </div>
+        <div style="padding:16px">
+            <div style="display:flex;align-items:center;
+                justify-content:space-between;margin-bottom:10px">
+                <span style="font-size:28px;font-weight:700;
+                    color:var(--text);font-family:var(--mono)">
+                    ${htmlKB} KB
+                </span>
+                <span style="font-size:12px;color:${htmlColor};
+                    font-weight:600">${htmlStatus}</span>
+            </div>
+            <!-- Progress bar -->
+            <div style="height:6px;background:var(--surface3);
+                border-radius:3px;overflow:hidden;margin-bottom:8px">
+                <div style="height:100%;border-radius:3px;
+                    background:${htmlColor};transition:width 0.5s ease;
+                    width:${Math.min(100,(htmlKB/150)*100)}%">
+                </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;
+                font-size:10px;color:var(--text3);margin-bottom:12px">
+                <span>0KB</span>
+                <span style="color:#fbbf24">75KB ⚠</span>
+                <span style="color:#f87171">102KB ✗</span>
+                <span style="color:#ef4444">150KB ✗✗</span>
+            </div>
+            <div style="font-size:12px;color:var(--text2);
+                line-height:1.6;padding:10px 12px;
+                background:var(--surface2);border-radius:6px;
+                border-left:3px solid ${htmlColor}">
+                ${htmlAdvice}
+            </div>
+        </div>
+    </div>
+
+    <!-- Attachment card -->
+    <div style="border:1px solid var(--border);border-radius:10px;
+        overflow:hidden;margin-bottom:14px">
+        <div style="background:var(--surface2);padding:10px 16px;
+            border-bottom:1px solid var(--border);
+            display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:10px;letter-spacing:1px;color:var(--text3)">
+                ATTACHMENT SIZE
+            </span>
+            <span style="font-size:11px;color:var(--text3)">
+                Bounce limit: 25MB
+            </span>
+        </div>
+        <div style="padding:16px">
+            <div style="display:flex;align-items:center;
+                justify-content:space-between;margin-bottom:10px">
+                <span style="font-size:28px;font-weight:700;
+                    color:var(--text);font-family:var(--mono)">
+                    ${attachMB >= 1
+                        ? attachMB.toFixed(1) + ' MB'
+                        : attachKB + ' KB'}
+                </span>
+                <span style="font-size:12px;color:${attachColor};
+                    font-weight:600">${attachStatus}</span>
+            </div>
+            <!-- Progress bar -->
+            <div style="height:6px;background:var(--surface3);
+                border-radius:3px;overflow:hidden;margin-bottom:8px">
+                <div style="height:100%;border-radius:3px;
+                    background:${attachColor};transition:width 0.5s ease;
+                    width:${Math.min(100,(attachMB/25)*100)}%">
+                </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;
+                font-size:10px;color:var(--text3);margin-bottom:12px">
+                <span>0MB</span>
+                <span style="color:#fbbf24">10MB ⚠</span>
+                <span style="color:#f87171">15MB ✗</span>
+                <span style="color:#ef4444">25MB ✗✗</span>
+            </div>
+            <div style="font-size:12px;color:var(--text2);
+                line-height:1.6;padding:10px 12px;
+                background:var(--surface2);border-radius:6px;
+                border-left:3px solid ${attachColor}">
+                ${attachAdvice}
+            </div>
+        </div>
+    </div>
+
+    <!-- Total payload summary -->
+    <div style="border:1px solid var(--border);border-radius:10px;
+        padding:14px 16px;background:var(--surface2);
+        display:flex;justify-content:space-between;align-items:center">
+        <div>
+            <div style="font-size:10px;color:var(--text3);
+                letter-spacing:1px;margin-bottom:4px">
+                TOTAL PAYLOAD
+            </div>
+            <div style="font-size:22px;font-weight:700;
+                color:var(--text);font-family:var(--mono)">
+                ${totalKB > 1024
+                    ? (totalKB/1024).toFixed(1) + ' MB'
+                    : totalKB + ' KB'}
+            </div>
+        </div>
+        <div style="text-align:right;font-size:11px;
+            color:var(--text3);line-height:1.8">
+            <div>HTML: ${htmlKB} KB</div>
+            <div>Attachments: ${attachMB >= 1
+                ? attachMB.toFixed(1) + ' MB'
+                : attachKB + ' KB'}</div>
+        </div>
+    </div>`;
+
+    document.getElementById('sizeTabContent').innerHTML = html;
+}
+
+// ===== LINK CHECKER =====
+async function runLinkCheck() {
+    if (!currentOpenId) return;
+    switchTab('links', document.querySelectorAll('.tab-btn')[3]);
+    const container = document.getElementById('linkContent');
+    container.innerHTML = '<div class="loading"><div class="spinner"></div>Scanning all links in this email...</div>';
+
+    try {
+        const res = await fetch(`/api/emails/${currentOpenId}/check-links`);
+        if (!res.ok) throw new Error('Failed');
+        const results = await res.json();
+
+        if (!results.length) {
+            container.innerHTML = `<div style="font-family:var(--mono);font-size:12px;
+                color:var(--text3);padding:20px 0">
+                No links found in this email.
+            </div>`;
+            return;
+        }
+
+        // Count by status
+        const ok = results.filter(r => r.statusLabel === 'OK').length;
+        const broken = results.filter(r => r.statusLabel === 'BROKEN').length;
+        const redirect = results.filter(r => r.statusLabel === 'REDIRECT').length;
+        const unreachable = results.filter(r => r.statusLabel === 'UNREACHABLE').length;
+
+        // Summary bar
+        let html = `<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+            <div style="font-family:var(--mono);font-size:11px;padding:6px 12px;
+                border-radius:6px;background:rgba(52,211,153,0.1);
+                color:var(--accent3);border:1px solid rgba(52,211,153,0.2)">
+                ✓ ${ok} OK
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;padding:6px 12px;
+                border-radius:6px;background:rgba(248,113,113,0.1);
+                color:var(--danger);border:1px solid rgba(248,113,113,0.2)">
+                ✗ ${broken} Broken
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;padding:6px 12px;
+                border-radius:6px;background:rgba(251,191,36,0.1);
+                color:#fbbf24;border:1px solid rgba(251,191,36,0.2)">
+                ↪ ${redirect} Redirect
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;padding:6px 12px;
+                border-radius:6px;background:rgba(71,85,105,0.2);
+                color:var(--text3);border:1px solid rgba(71,85,105,0.3)">
+                ? ${unreachable} Unreachable
+            </div>
+            <div style="font-family:var(--mono);font-size:11px;padding:6px 12px;
+                border-radius:6px;background:var(--surface2);
+                color:var(--text2);border:1px solid var(--border)">
+                Total: ${results.length} links
+            </div>
+        </div>`;
+
+        // Individual link results
+        results.forEach(r => {
+    let badgeStyle, badgeText, infoText, infoColor, fixText;
+
+    switch(r.statusLabel) {
+        case 'OK':
+            badgeStyle = 'background:rgba(52,211,153,0.1);color:var(--accent3);border:1px solid rgba(52,211,153,0.2)';
+            badgeText = '✓ ' + r.statusCode + ' OK';
+            infoText = 'Link is working correctly — server responded successfully.';
+            infoColor = 'var(--accent3)';
+            fixText = null;
+            break;
+        case 'REDIRECT':
+            badgeStyle = 'background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2)';
+            badgeText = '↪ ' + r.statusCode + ' REDIRECT';
+            infoText = r.statusCode === 301
+                ? 'Permanent redirect — this URL has moved to a new location permanently.'
+                : 'Temporary redirect — server is redirecting to another URL temporarily.';
+            infoColor = '#fbbf24';
+            fixText = 'Update your link to point directly to the final destination URL to avoid redirect chains.';
+            break;
+        case 'BROKEN':
+            badgeStyle = 'background:rgba(248,113,113,0.1);color:var(--danger);border:1px solid rgba(248,113,113,0.2)';
+            badgeText = '✗ ' + r.statusCode + ' BROKEN';
+            infoText = r.statusCode === 404
+                ? 'Page not found — this URL does not exist on the server.'
+                : r.statusCode === 403
+                ? 'Access forbidden — the server refused access to this URL.'
+                : r.statusCode === 401
+                ? 'Unauthorised — this URL requires authentication.'
+                : r.statusCode === 500
+                ? 'Server error — the destination server crashed or has an internal error.'
+                : 'Request failed — server returned an error response.';
+            infoColor = 'var(--danger)';
+            fixText = r.statusCode === 404
+                ? 'Check if the route exists in your application. This link will show a broken page to real users.'
+                : r.statusCode === 403
+                ? 'This URL is restricted. Verify the link is publicly accessible before sending to users.'
+                : 'Fix the server error before sending this email to real users.';
+            break;
+        default:
+            badgeStyle = 'background:rgba(71,85,105,0.2);color:var(--text3);border:1px solid rgba(71,85,105,0.3)';
+            badgeText = '? UNREACHABLE';
+            infoText = 'Could not connect to this URL — domain may not exist, server is down, or connection timed out.';
+            infoColor = 'var(--text3)';
+            fixText = 'Verify the domain name is correct and the server is running. This link will not work for real users.';
+    }
+
+    html += `<div style="padding:12px 14px;border-radius:8px;
+        margin-bottom:10px;background:var(--surface);
+        border:1px solid var(--border);transition:border-color 0.2s"
+        onmouseover="this.style.borderColor='var(--border2)'"
+        onmouseout="this.style.borderColor='var(--border)'">
+
+        <!-- Top row: badge + URL + open -->
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-family:var(--mono);font-size:11px;
+                padding:4px 10px;border-radius:5px;
+                flex-shrink:0;${badgeStyle}">
+                ${badgeText}
+            </span>
+            <span style="font-family:var(--mono);font-size:11px;
+                color:var(--text2);overflow:hidden;
+                text-overflow:ellipsis;white-space:nowrap;flex:1"
+                title="${escHtml(r.url)}">
+                ${escHtml(r.url)}
+            </span>
+            <a href="${escHtml(r.url)}" target="_blank"
+                style="font-family:var(--mono);font-size:10px;
+                color:var(--accent);text-decoration:none;
+                flex-shrink:0;opacity:0.7"
+                onmouseover="this.style.opacity='1'"
+                onmouseout="this.style.opacity='0.7'">
+                ↗ open
+            </a>
+        </div>
+
+        <!-- Info line -->
+        <div style="font-size:12px;color:${infoColor};
+            padding-left:2px;line-height:1.5">
+            ${infoText}
+        </div>
+
+        ${fixText ? `
+        <!-- Fix suggestion -->
+        <div style="margin-top:6px;padding:7px 10px;
+            background:var(--surface2);border-radius:5px;
+            font-size:11px;color:var(--text2);line-height:1.5;
+            border-left:2px solid ${infoColor}">
+            <span style="font-family:var(--mono);font-size:10px;
+                color:var(--accent)">FIX → </span>
+            ${fixText}
+        </div>` : ''}
+
+    </div>`;
+});
+        container.innerHTML = html;
+
+    } catch(e) {
+        container.innerHTML = `<div style="font-family:var(--mono);font-size:12px;
+            color:var(--danger);padding:20px 0">
+            Failed to check links. Make sure the server is running.
+        </div>`;
+    }
+}
+
+  // ===== AI SPAM ANALYSER =====
+async function runAI() {
+    if (!currentOpenId) return;
+    switchTab('ai', document.querySelectorAll('.tab-btn')[4]);
+    const container = document.getElementById('aiContent');
+    container.innerHTML = `<div class="loading">
+        <div class="spinner"></div>
+        Analysing email with Gemini AI — please wait...
+    </div>`;
+
+    try {
+        const res = await fetch(`/api/emails/${currentOpenId}/analyse`, {
+            method: 'POST'
+        });
+        if (!res.ok) throw new Error('API call failed');
+        const result = await res.json();
+
+        // Score colour based on value
+        let scoreColor, gaugeBg, scoreEmoji;
+        if (result.spamScore <= 20) {
+            scoreColor = 'var(--accent3)';
+            gaugeBg = 'rgba(52,211,153,0.08)';
+            scoreEmoji = '✦';
+        } else if (result.spamScore <= 40) {
+            scoreColor = '#86efac';
+            gaugeBg = 'rgba(134,239,172,0.08)';
+            scoreEmoji = '✦';
+        } else if (result.spamScore <= 60) {
+            scoreColor = '#fbbf24';
+            gaugeBg = 'rgba(251,191,36,0.08)';
+            scoreEmoji = '⚠';
+        } else if (result.spamScore <= 80) {
+            scoreColor = '#fb923c';
+            gaugeBg = 'rgba(251,146,60,0.08)';
+            scoreEmoji = '⚠';
+        } else {
+            scoreColor = 'var(--danger)';
+            gaugeBg = 'rgba(248,113,113,0.08)';
+            scoreEmoji = '✗';
+        }
+
+        // Score gauge
+        let html = `
+        <div style="border-radius:10px;padding:20px 24px;margin-bottom:20px;
+            background:${gaugeBg};border:1px solid ${scoreColor}33;
+            display:flex;align-items:center;gap:20px">
+            <div style="text-align:center;flex-shrink:0">
+                <div style="font-family:var(--mono);font-size:52px;
+                    font-weight:700;color:${scoreColor};line-height:1">
+                    ${result.spamScore}
+                </div>
+                <div style="font-family:var(--mono);font-size:10px;
+                    color:var(--text3);margin-top:4px">OUT OF 100</div>
+            </div>
+            <div style="flex:1">
+                <div style="font-size:18px;font-weight:600;
+                    color:${scoreColor};margin-bottom:6px">
+                    ${scoreEmoji} ${result.scoreLabel}
+                </div>
+                <div style="font-size:13px;color:var(--text2);line-height:1.6">
+                    ${escHtml(result.summary)}
+                </div>
+            </div>
+        </div>`;
+
+        // Score bar
+        html += `
+        <div style="margin-bottom:20px">
+            <div style="display:flex;justify-content:space-between;
+                font-family:var(--mono);font-size:10px;
+                color:var(--text3);margin-bottom:6px">
+                <span>0 — Excellent</span>
+                <span>100 — Critical</span>
+            </div>
+            <div style="height:6px;background:var(--surface2);
+                border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${result.spamScore}%;
+                    background:${scoreColor};border-radius:3px;
+                    transition:width 0.8s ease"></div>
+            </div>
+        </div>`;
+
+        // Issues section
+        if (result.issues && result.issues.length > 0) {
+            html += `<div style="font-family:var(--mono);font-size:10px;
+                letter-spacing:2px;text-transform:uppercase;
+                color:var(--text3);margin-bottom:12px">
+                Issues Found — ${result.issues.length}
+            </div>`;
+
+            result.issues.forEach(issue => {
+                let borderColor, bgColor, sevColor;
+                switch(issue.severity) {
+                    case 'HIGH':
+                        borderColor = 'var(--danger)';
+                        bgColor = 'rgba(248,113,113,0.06)';
+                        sevColor = 'var(--danger)';
+                        break;
+                    case 'MEDIUM':
+                        borderColor = '#fbbf24';
+                        bgColor = 'rgba(251,191,36,0.06)';
+                        sevColor = '#fbbf24';
+                        break;
+                    default:
+                        borderColor = 'var(--accent3)';
+                        bgColor = 'rgba(52,211,153,0.06)';
+                        sevColor = 'var(--accent3)';
+                }
+
+                html += `
+                <div style="border-radius:8px;padding:14px 16px;
+                    margin-bottom:10px;background:${bgColor};
+                    border-left:3px solid ${borderColor};
+                    border-top:1px solid ${borderColor}22;
+                    border-right:1px solid ${borderColor}22;
+                    border-bottom:1px solid ${borderColor}22">
+                    <div style="font-family:var(--mono);font-size:10px;
+                        letter-spacing:1px;color:${sevColor};
+                        margin-bottom:6px">
+                        ● ${issue.severity} SEVERITY
+                    </div>
+                    <div style="font-size:13px;color:var(--text);
+                        margin-bottom:8px;line-height:1.5">
+                        ${escHtml(issue.issue)}
+                    </div>
+                    <div style="font-size:12px;color:var(--text2);
+                        padding:8px 12px;background:var(--surface);
+                        border-radius:5px;line-height:1.5">
+                        <span style="color:var(--accent);
+                            font-family:var(--mono);font-size:10px">
+                            FIX →
+                        </span>
+                        ${escHtml(issue.fix)}
+                    </div>
+                </div>`;
+            });
+        } else {
+            html += `
+            <div style="border-radius:8px;padding:16px 20px;
+                background:rgba(52,211,153,0.06);
+                border:1px solid rgba(52,211,153,0.2);
+                font-size:13px;color:var(--accent3);
+                display:flex;align-items:center;gap:10px">
+                <span style="font-size:18px">✦</span>
+                No spam signals detected — this email looks clean!
+            </div>`;
+        }
+
+        // Footer note
+        html += `
+        <div style="margin-top:16px;padding:10px 14px;
+            border-radius:6px;background:var(--surface2);
+            font-family:var(--mono);font-size:10px;
+            color:var(--text3);line-height:1.7">
+            ✦ Powered by Google Gemini AI ·
+            Analysis based on common spam filter criteria ·
+            Results are indicative, not guaranteed
+        </div>`;
+
+        container.innerHTML = html;
+
+    } catch(e) {
+        container.innerHTML = `
+        <div style="font-family:var(--mono);font-size:12px;
+            color:var(--danger);padding:20px 0">
+            Failed to analyse email. Check your Gemini API key
+            in application.properties and try again.
+        </div>`;
+    }
+}
+
+  // ===== DELETE =====
+ async function deleteCurrentEmail() {
+    if (!currentOpenId) return;
+
+    // Find email details for confirm message
+    const email = allEmails.find(e => e.id === currentOpenId);
+    const subject = email ? (email.subject || '(No Subject)') : 'this email';
+    const from = email ? (email.from || 'unknown') : 'unknown';
+
+    // Show confirm dialog
+    const confirmed = confirm(
+        `Delete this email?\n\n` +
+        `From: ${from}\n` +
+        `Subject: ${subject}\n\n` +
+        `This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch(`/api/emails/${currentOpenId}`,
+            { method: 'DELETE' });
+        if (res.ok) {
+            allEmails = allEmails.filter(e => e.id !== currentOpenId);
+            currentOpenId = null;
+            document.getElementById('emptyState').style.display = 'flex';
+            document.getElementById('emailDetail').style.display = 'none';
+            renderList(allEmails);
+        } else {
+            alert('Failed to delete email. Please try again.');
+        }
+    } catch(e) {
+        alert('Error deleting email: ' + e.message);
+    }
+}
+
+async function confirmDeleteAll() {
+    const count = allEmails.length;
+
+    if (count === 0) {
+        alert('Inbox is already empty.');
+        return;
+    }
+
+    // First confirmation
+    const firstConfirm = confirm(
+        `Clear entire inbox?\n\n` +
+        `You are about to delete ${count} email${count !== 1 ? 's' : ''}.\n` +
+        `This action cannot be undone.`
+    );
+
+    if (!firstConfirm) return;
+
+    // Second confirmation for safety
+    const secondConfirm = confirm(
+        `Are you absolutely sure?\n\n` +
+        `All ${count} email${count !== 1 ? 's' : ''} will be permanently deleted.\n` +
+        `Press OK to confirm.`
+    );
+
+    if (!secondConfirm) return;
+
+    try {
+        const res = await fetch('/api/emails', { method: 'DELETE' });
+        if (res.ok) {
+            allEmails = [];
+            currentOpenId = null;
+            document.getElementById('emptyState').style.display = 'flex';
+            document.getElementById('emailDetail').style.display = 'none';
+            renderList([]);
+        } else {
+            alert('Failed to clear inbox. Please try again.');
+        }
+    } catch(e) {
+        alert('Error clearing inbox: ' + e.message);
+    }
+}
+
+function filterEmails() {
+    fetchEmails(document.getElementById('searchInput').value);
+  }
+
+  // ===== TOAST =====
+  function showToast(from, subject) {
+    document.getElementById('toastTitle').textContent = 'New email from ' + from;
+    document.getElementById('toastSub').textContent = subject;
+    const t = document.getElementById('toast');
+    t.style.display = 'flex';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, 4000);
+  }
+
+  function hideToast() {
+    document.getElementById('toast').style.display = 'none';
+  }
+
+  // ===== UTILS =====
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ===== EMAIL COMPOSER =====
+// ===== EMAIL COMPOSER =====
+let composerAttachments = [];
+let currentEditorTab = 'rich';
+let richContent = '';
+let htmlContent = '';
+let composerUploadedImageIds = []; 
+
+function openComposer() {
+    composerAttachments = [];
+    composerUploadedImageIds = []; // Reset orphan tracking
+    currentEditorTab = 'rich';
+
+    // Reset content stores
+    richContent = `<p>Hi there,</p>
+<p>Write your email content here.</p>
+<p>Best regards,<br>Your Name</p>`;
+    htmlContent = '';
+
+    // Reset UI
+    document.getElementById('attachmentList').innerHTML = '';
+    document.getElementById('attachCount').textContent = 'No attachments';
+    document.getElementById('cSubject').value = '';
+    document.getElementById('cFrom').value = 'developer@emailhog.local';
+    document.getElementById('cTo').value = 'inbox@emailhog.local';
+
+    // Reset send button
+    const sendBtn = document.getElementById('sendBtn');
+    sendBtn.textContent = '✦ Send to Sandbox';
+    sendBtn.disabled = false;
+
+    // Load rich editor content
+    document.getElementById('editorRich').innerHTML = richContent;
+    document.getElementById('editorHtml').value = '';
+
+    switchEditorTab('rich');
+
+    const overlay = document.getElementById('composerOverlay');
+    overlay.style.display = 'flex';
+    setTimeout(() => document.getElementById('cSubject').focus(), 100);
+}
+
+function closeComposer(emailWasSent = false) {
+    saveCurrentTabContent();
+    const sendBtn = document.getElementById('sendBtn');
+    sendBtn.textContent = '✦ Send to Sandbox';
+    sendBtn.disabled = false;
+    document.getElementById('composerOverlay').style.display = 'none';
+
+    // If cancelled (not sent) — delete orphaned uploaded images
+    if (!emailWasSent && composerUploadedImageIds.length > 0) {
+        composerUploadedImageIds.forEach(fileId => {
+            fetch('/api/attachments/' + fileId, { method: 'DELETE' })
+                .catch(e => console.log('Cleanup failed for', fileId));
+        });
+        composerUploadedImageIds = [];
+    }
+}
+// Close composer when clicking outside
+document.getElementById('composerOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeComposer();
+});
+
+// Save content from whichever tab is currently active
+function saveCurrentTabContent() {
+    if (currentEditorTab === 'rich') {
+        richContent = document.getElementById('editorRich').innerHTML;
+        htmlContent = richContent; // keep html in sync
+    } else if (currentEditorTab === 'html') {
+        htmlContent = document.getElementById('editorHtml').value;
+        richContent = htmlContent; // keep rich in sync
+    }
+}
+
+// ===== EDITOR TABS =====
+function switchEditorTab(tab) {
+    // First save whatever is currently in the active editor
+    saveCurrentTabContent();
+
+    // Now switch to the new tab and load its content
+    if (tab === 'rich') {
+        // Load content into rich editor
+        const content = htmlContent || richContent;
+        if (content) {
+            document.getElementById('editorRich').innerHTML = content;
+        }
+    } else if (tab === 'html') {
+        // Load content into html editor
+        const content = richContent || htmlContent;
+        document.getElementById('editorHtml').value = content;
+    } else if (tab === 'preview') {
+        // Render preview in iframe
+        const content = richContent || htmlContent;
+        const frame = document.getElementById('composerPreviewFrame');
+        frame.srcdoc = content || '<p style="padding:20px;color:#999">Nothing to preview yet.</p>';
+    }
+
+    currentEditorTab = tab;
+
+    // Show correct panel
+    document.getElementById('editorRich').style.display =
+        tab === 'rich' ? 'block' : 'none';
+    document.getElementById('editorHtml').style.display =
+        tab === 'html' ? 'flex' : 'none';
+    document.getElementById('editorPreview').style.display =
+        tab === 'preview' ? 'block' : 'none';
+    document.getElementById('richToolbar').style.display =
+        tab === 'rich' ? 'flex' : 'none';
+
+    // Update tab button styles
+    document.getElementById('editorTabRich').classList.toggle('active', tab === 'rich');
+    document.getElementById('editorTabHtml').classList.toggle('active', tab === 'html');
+    document.getElementById('editorTabPreview').classList.toggle('active', tab === 'preview');
+}
+
+// Get current HTML for sending
+function getCurrentHtml() {
+    saveCurrentTabContent();
+    return htmlContent || richContent || '';
+}
+
+// Make images in editor clickable to select
+// so single Backspace/Delete key removes them
+document.getElementById('editorRich').addEventListener('click',
+    function(e) {
+        if (e.target.tagName === 'IMG') {
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.selectNode(e.target);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            e.target.style.outline = '2px solid #38bdf8';
+        } else {
+            // Deselect any selected image
+            document.querySelectorAll('#editorRich img').forEach(
+                img => img.style.outline = 'none'
+            );
+        }
+    }
+);
+
+// Keyboard delete for selected image
+document.getElementById('editorRich').addEventListener('keydown',
+    function(e) {
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                // Check if an image is selected
+                const container = range.commonAncestorContainer;
+                if (container.tagName === 'IMG' ||
+                    (range.startContainer === range.endContainer &&
+                     range.startOffset !== range.endOffset)) {
+                    // Let default behavior handle it
+                    return;
+                }
+            }
+        }
+    }
+);
+// ===== IMAGE INSERT VIA BUTTON =====
+// We save cursor position BEFORE opening file picker
+// because file picker causes editor to lose focus
+
+let savedImageInsertRange = null;
+
+function triggerImageInsert() {
+    const editor = document.getElementById('editorRich');
+    editor.focus();
+
+    // Save cursor range RIGHT NOW before file dialog opens
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+        savedImageInsertRange = sel.getRangeAt(0).cloneRange();
+    } else {
+        // No cursor — create range at end of editor
+        savedImageInsertRange = document.createRange();
+        savedImageInsertRange.selectNodeContents(editor);
+        savedImageInsertRange.collapse(false);
+    }
+
+    // Open file picker
+    document.getElementById('imageFileInput').click();
+}
+
+function handleImageFileSelect(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    input.value = ''; // Reset so same file can be selected again
+
+    // Restore saved cursor position into editor
+    const editor = document.getElementById('editorRich');
+    editor.focus();
+
+    if (savedImageInsertRange) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedImageInsertRange);
+        savedImageInsertRange = null;
+    }
+
+    // Now upload — cursor is in correct position
+    uploadAndInsertImage(file);
+}
+
+// ===== RICH TEXT FORMATTING =====
+function formatDoc(command, value = null) {
+    document.getElementById('editorRich').focus();
+    document.execCommand(command, false, value);
+    // Save after formatting
+    richContent = document.getElementById('editorRich').innerHTML;
+    htmlContent = richContent;
+}
+
+
+// ===== IMAGE PASTE AND DROP HANDLER =====
+// Intercepts Base64 images pasted/dropped into rich editor
+// Uploads to GridFS and replaces with clean URL
+
+async function handleImagePaste(event) {
+    const items = (event.clipboardData || event.originalEvent.clipboardData).items;
+    for (let item of items) {
+        if (item.type.startsWith('image/')) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            await uploadAndInsertImage(file);
+            return;
+        }
+    }
+    // Not an image paste — check for HTML with Base64 images
+    const html = event.clipboardData.getData('text/html');
+    if (html && html.includes('base64')) {
+        event.preventDefault();
+        await processAndInsertHtml(html);
+        return;
+    }
+    // Regular paste — allow normally
+}
+
+async function handleImageDrop(event) {
+    const files = event.dataTransfer.files;
+    for (let file of files) {
+        if (file.type.startsWith('image/')) {
+            event.preventDefault();
+            await uploadAndInsertImage(file);
+            return;
+        }
+    }
+}
+
+// Upload image file to GridFS and insert as clean URL
+async function uploadAndInsertImage(file) {
+    const editor = document.getElementById('editorRich');
+    editor.focus();
+
+    // Insert a temporary invisible bookmark element AT the cursor
+    // This bookmark stays in the DOM during the async upload
+    // so we know exactly where to insert the image
+    const bookmarkId = 'cursor-bookmark-' + Date.now();
+    document.execCommand('insertHTML', false,
+        `<span id="${bookmarkId}" style="display:inline-block;
+        width:0;height:0;overflow:hidden"></span>`
+    );
+
+    // Show uploading toast
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:80px;right:24px;'
+        + 'background:#1e293b;color:#38bdf8;padding:8px 16px;'
+        + 'border-radius:8px;font-family:var(--mono);font-size:12px;'
+        + 'border:1px solid rgba(56,189,248,0.3);z-index:9999;'
+        + 'box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+    toast.textContent = '⟳ Uploading image...';
+    document.body.appendChild(toast);
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await fetch('/api/attachments/upload-image', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await res.json();
+
+        // Remove toast
+        if (document.body.contains(toast)) {
+            document.body.removeChild(toast);
+        }
+
+        if (result.url) {
+            const absoluteUrl = 'http://localhost:8080' + result.url;
+
+            // Track for orphan cleanup
+            composerUploadedImageIds.push(result.fileId);
+
+            // Find our bookmark in the editor
+            const bookmark = document.getElementById(bookmarkId);
+
+            if (bookmark) {
+                // Create image element
+                const img = document.createElement('img');
+                img.src = absoluteUrl;
+                img.setAttribute('data-gridfs-id', result.fileId);
+                img.style.cssText = 'max-width:480px;width:100%;'
+                    + 'height:auto;border-radius:4px;'
+                    + 'margin:8px 0;display:block;cursor:pointer';
+
+                // Create line break after image
+                const br = document.createElement('br');
+
+                // Replace bookmark with image + br
+                bookmark.parentNode.insertBefore(img, bookmark);
+                bookmark.parentNode.insertBefore(br, bookmark);
+                bookmark.parentNode.removeChild(bookmark);
+
+                // Move cursor after the image
+                editor.focus();
+                const sel = window.getSelection();
+                const range = document.createRange();
+                range.setStartAfter(br);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            } else {
+                // Bookmark lost — append to end of editor
+                editor.innerHTML += `<img src="${absoluteUrl}"
+                    data-gridfs-id="${result.fileId}"
+                    style="max-width:480px;width:100%;height:auto;
+                    border-radius:4px;margin:8px 0;display:block;
+                    cursor:pointer"/><br/>`;
+            }
+
+            // Sync content stores
+            richContent = editor.innerHTML;
+            htmlContent = richContent;
+
+        } else {
+            // Remove bookmark on failure
+            const bookmark = document.getElementById(bookmarkId);
+            if (bookmark) bookmark.remove();
+            alert('Upload failed: ' + (result.error || 'Unknown'));
+        }
+
+    } catch(e) {
+        // Remove toast and bookmark on error
+        if (document.body.contains(toast)) {
+            document.body.removeChild(toast);
+        }
+        const bookmark = document.getElementById(bookmarkId);
+        if (bookmark) bookmark.remove();
+        alert('Upload error: ' + e.message);
+    }
+}
+
+
+// Process pasted HTML — replace Base64 images with GridFS URLs
+async function processAndInsertHtml(html) {
+    // Find all Base64 images in pasted HTML
+    const base64Pattern = /src="data:image\/([^;]+);base64,([^"]+)"/g;
+    const base64PatternSingle = /src='data:image\/([^;]+);base64,([^']+)'/g;
+
+    let processedHtml = html;
+    const matches = [...html.matchAll(
+        /src=["']data:image\/([^;]+);base64,([^"']+)["']/g
+    )];
+
+    for (let match of matches) {
+        const mimeType = 'image/' + match[1];
+        const base64Data = match[2];
+
+        // Convert Base64 to blob
+        const byteString = atob(base64Data);
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeType });
+        const file = new File([blob], 'pasted-image.' + match[1],
+            { type: mimeType });
+
+        // Upload to GridFS
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/attachments/upload-image', {
+            method: 'POST',
+            body: formData
+        });
+        const result = await res.json();
+
+        if (result.url) {
+            const absoluteUrl = 'http://localhost:8080' + result.url;
+            // Replace Base64 with clean URL in HTML
+            processedHtml = processedHtml.replace(
+                match[0],
+                `src="${absoluteUrl}"`
+            );
+        }
+    }
+
+    // Insert processed HTML into editor
+    document.getElementById('editorRich').focus();
+    document.execCommand('insertHTML', false, processedHtml);
+    richContent = document.getElementById('editorRich').innerHTML;
+    htmlContent = richContent;
+}
+
+function insertLink() {
+    const url = prompt('Enter URL:', 'https://');
+    if (url) {
+        document.getElementById('editorRich').focus();
+        document.execCommand('createLink', false, url);
+        richContent = document.getElementById('editorRich').innerHTML;
+        htmlContent = richContent;
+    }
+}
+
+// ===== ATTACHMENTS =====
+function handleAttachments(input) {
+    const files = Array.from(input.files);
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64 = e.target.result.split(',')[1];
+            composerAttachments.push({
+                filename: file.name,
+                base64Content: base64,
+                mimeType: file.type || 'application/octet-stream'
+            });
+            renderAttachmentList();
+        };
+        reader.readAsDataURL(file);
+    });
+    input.value = '';
+}
+
+function renderAttachmentList() {
+    const list = document.getElementById('attachmentList');
+    const count = document.getElementById('attachCount');
+    count.textContent = composerAttachments.length + ' file'
+        + (composerAttachments.length !== 1 ? 's' : '') + ' attached';
+
+    list.innerHTML = '';
+    composerAttachments.forEach((att, index) => {
+        const tag = document.createElement('div');
+        tag.style.cssText = `display:flex;align-items:center;gap:6px;
+            padding:4px 10px;border-radius:5px;
+            background:var(--surface2);border:1px solid var(--border);
+            font-family:var(--mono);font-size:11px;color:var(--text2)`;
+        tag.innerHTML = `
+            <span>📎 ${escHtml(att.filename)}</span>
+            <button onclick="removeAttachment(${index})"
+                style="background:none;border:none;color:var(--danger);
+                cursor:pointer;font-size:14px;line-height:1;padding:0">×</button>`;
+        list.appendChild(tag);
+    });
+}
+
+function removeAttachment(index) {
+    composerAttachments.splice(index, 1);
+    renderAttachmentList();
+}
+
+// ===== SEND COMPOSED EMAIL =====
+async function sendComposedEmail() {
+    const from = document.getElementById('cFrom').value.trim();
+    const to = document.getElementById('cTo').value.trim();
+    const subject = document.getElementById('cSubject').value.trim();
+    const htmlBody = getCurrentHtml();
+
+    if (!to) {
+        alert('Please enter a recipient email address (To field).');
+        return;
+    }
+    if (!subject) {
+        alert('Please enter a subject line.');
+        return;
+    }
+    if (!htmlBody || htmlBody.trim() === '') {
+        alert('Please write something in the email body.');
+        return;
+    }
+
+    const sendBtn = document.getElementById('sendBtn');
+    sendBtn.textContent = '⟳ Sending...';
+    sendBtn.disabled = true;
+
+    try {
+        const payload = {
+            from: from || 'developer@emailhog.local',
+            to: to,
+            subject: subject,
+            htmlBody: htmlBody,
+            plainText: '',
+            attachments: composerAttachments
+        };
+
+        const res = await fetch('/api/emails/compose', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await res.json();
+
+        if (result.status === 'success') {
+            // Reset button BEFORE closing
+            sendBtn.textContent = '✦ Send to Sandbox';
+            sendBtn.disabled = false;
+            closeComposer(true);
+            showToast(from || 'composer@emailhog', subject);
+        } else {
+            alert('Failed to send: ' + result.message);
+            sendBtn.textContent = '✦ Send to Sandbox';
+            sendBtn.disabled = false;
+        }
+    } catch(e) {
+        alert('Error: ' + e.message);
+        sendBtn.textContent = '✦ Send to Sandbox';
+        sendBtn.disabled = false;
+    }
+}
+
+  // ===== WEBSOCKET CONNECTION =====
+let stompClient = null;
+
+function connectWebSocket() {
+    const socket = new SockJS('/ws');
+    stompClient = Stomp.over(socket);
+
+    // Suppress STOMP console logs
+    stompClient.debug = null;
+
+    stompClient.connect({}, function (frame) {
+        console.log('EmailHog WebSocket connected');
+
+        // Subscribe to the inbox broadcast channel
+        stompClient.subscribe('/topic/inbox', function (message) {
+            const newEmail = JSON.parse(message.body);
+
+            // Add new email to the top of our local array
+            allEmails.unshift(newEmail);
+
+            // Re-render the inbox list
+            renderList(allEmails);
+
+            // Show toast notification
+            showToast(newEmail.from || 'Unknown', newEmail.subject || '(No Subject)');
+        });
+    }, function (error) {
+        // If WebSocket fails, fallback to polling after 3 seconds
+        console.log('WebSocket failed, falling back to polling...');
+        setTimeout(() => {
+            setInterval(() => fetchEmails(), 2000);
+        }, 3000);
+    });
+}
+
+// Load existing emails once on page load, then connect WebSocket
+fetchEmails();
+connectWebSocket();
+</script>
+</body>
+</html>

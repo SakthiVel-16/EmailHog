@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-MailCloneApplication<mail-clone>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.javahog.mail_clone.MailCloneApplication",
+            "projectName": "mail-clone",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
