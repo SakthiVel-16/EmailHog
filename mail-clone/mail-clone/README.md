@@ -39,7 +39,7 @@ A full-featured email sandbox application built with **Spring Boot 3.4.1** that 
 
 ```bash
 git clone https://github.com/yourusername/mail-clone.git
-cd mail-clone/mail-clone
+cd mail-clone/mail-clone/mail-clone
 ```
 
 ### 2. Setup Environment Variables
@@ -65,14 +65,30 @@ GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 
 ### 3. Build the Project
 
+**Windows:**
+
 ```bash
-mvn clean install
+mvnw.cmd clean install
+```
+
+**Mac/Linux:**
+
+```bash
+./mvnw clean install
 ```
 
 ### 4. Run the Application
 
+**Windows:**
+
 ```bash
-mvn spring-boot:run
+mvnw.cmd spring-boot:run
+```
+
+**Mac/Linux:**
+
+```bash
+./mvnw spring-boot:run
 ```
 
 The app will automatically read credentials from your `.env` file.
@@ -84,6 +100,29 @@ Open your browser and navigate to:
 ```
 http://localhost:8080
 ```
+
+---
+
+## ⚠️ Important Notes
+
+### Directory Path
+
+After cloning, make sure to navigate to the **correct folder**:
+
+```bash
+cd mail-clone/mail-clone/mail-clone
+```
+
+There are **3 nested `mail-clone/` folders** - you need to go to the deepest one!
+
+### Maven Wrapper
+
+This project uses **Maven Wrapper** - no need to install Maven globally:
+
+- **Windows:** `mvnw.cmd` (batch file)
+- **Mac/Linux:** `./mvnw` (shell script)
+
+Always use `mvnw.cmd` on Windows, not `mvn` command!
 
 ## 📁 Project Structure
 
