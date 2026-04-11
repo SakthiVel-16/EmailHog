@@ -1,38 +1,34 @@
 # 🚀 Setup Instructions for Mail Clone
 
-## Quick Start - 3 Simple Steps
+## Quick Start - 4 Simple Steps
 
 ### Step 1: Clone Repository
 
 ```bash
 git clone https://github.com/yourusername/mail-clone.git
-cd mail-clone/mail-clone/mail-clone
+cd mail-clone/mail-clone
 ```
 
-### Step 2: Setup Environment
+### Step 2: Create `.env` File
 
 ```bash
-# Copy the template
 cp .env.example .env
-
-# Edit .env and add your credentials
-notepad .env
 ```
 
-Add your actual credentials to `.env`:
+### Step 3: Add Your Credentials
+
+Edit `.env` and add your actual credentials:
 
 ```properties
-# MongoDB Atlas URI (get from https://www.mongodb.com/cloud/atlas)
-# Replace YOUR_MONGODB_URI_HERE with your actual connection string
+# MongoDB URI from: https://www.mongodb.com/cloud/atlas
 MONGODB_URI=YOUR_MONGODB_URI_HERE
 MONGODB_DATABASE=emailhog
 
-# Gemini API Key (get from https://aistudio.google.com)
-# Replace YOUR_GEMINI_API_KEY with your actual API key
+# Gemini API Key from: https://aistudio.google.com
 GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
 ```
 
-### Step 3: Run the Application
+### Step 4: Run Application
 
 **Windows:**
 
@@ -46,118 +42,38 @@ mvnw.cmd spring-boot:run
 ./mvnw spring-boot:run
 ```
 
-That's it! 🎉 Your app will automatically read credentials from `.env` file.
+✅ Open **http://localhost:8080** when app starts!
 
 ---
 
-## 🔐 Security - How It Works
+## 🔐 Security Overview
 
-### What's Protected? 🔒
-
-- ✅ `.env` - Your actual credentials (blocked by `.gitignore`)
-- ✅ `.env.local` - Local overrides (blocked by `.gitignore`)
-
-### What's Safe to Commit? ✅
-
-- ✅ `.env.example` - Template with placeholders ONLY
-- ✅ `application.properties` - Has `${PLACEHOLDER:}` - no real secrets
-- ✅ All Java source code, documentation
-
-### Never Committed - Protected by .gitignore
-
-```
-.env                         ← Your local secrets (PRIVATE)
-.env.local                   ← Local overrides (PRIVATE)
-```
+✅ **`.env`** - Your credentials (private, not on GitHub)
+✅ **`.env.example`** - Template only (public, safe to share)
+✅ **`application.properties`** - Placeholders only (public, safe)
 
 ---
 
-## 📁 File Structure
+## � For Team Members
 
-```
-mail-clone/                          (root folder - from git clone)
-├── mail-clone/                      (first level)
-│   ├── mail-clone/                  ← ⭐ You are here after: cd mail-clone/mail-clone/mail-clone
-│   │   ├── .env                     ← Your credentials (private, not committed)
-│   │   ├── .env.example             ← Template (public, safe)
-│   │   ├── application.properties   ← Placeholders ${VAR:} (public, safe)
-│   │   ├── mvnw.cmd                 ← Windows: Use this to run
-│   │   ├── mvnw                     ← Mac/Linux: Use this to run
-│   │   ├── pom.xml                  ← Maven config with dotenv dependency
-│   │   ├── SETUP_INSTRUCTIONS.md    ← This file
-│   │   ├── src/
-│   │   │   ├── main/java/...        ← Your Java code
-│   │   │   └── resources/
-│   │   │       └── static/index.html  ← Web UI
-│   │   └── README.md                ← Project documentation
-```
-
-**Important:** Navigate to the **deepest `mail-clone/`** folder before running commands!
-
----
-
-## 🆘 Troubleshooting
-
-### Problem: "mvnw.cmd" or "mvn" command not found
-
-**Solution:** Make sure you're in the correct directory:
-
-```bash
-# Verify you're in the deepest mail-clone folder
-cd mail-clone/mail-clone/mail-clone
-
-# Check that mvnw.cmd exists
-dir mvnw.cmd
-
-# Then run
-mvnw.cmd spring-boot:run
-```
-
-### Problem: "API key not found" or MongoDB connection fails
-
-**Solution:** Make sure you:
-
-1. Copied `.env.example` to `.env`
-2. Edited `.env` with YOUR actual credentials
-3. Verified `.env` is NOT in `.gitignore` rules (it should be blocked)
-
-### Problem: Changes to `.env` not taking effect
-
-**Solution:** Restart the application after editing `.env`
-
-### Problem: Spring Boot won't read `.env`
-
-**Verify:** Make sure `pom.xml` has the dotenv dependency:
-
-```xml
-<dependency>
-    <groupId>me.paulschwarz</groupId>
-    <artifactId>spring-dotenv</artifactId>
-    <version>3.0.0</version>
-</dependency>
-```
-
----
-
-## 👥 For Team Members
-
-When team members clone your repo, they follow the same steps:
-
-```bash
-# 1. Clone
-git clone <repo-url>
-cd mail-clone/mail-clone/mail-clone
+New users just follow the same 4 steps above. 🎉
+cd mail-clone/mail-clone
 
 # 2. Setup (with THEIR credentials)
+
 cp .env.example .env
+
 # Edit .env with their MongoDB & API keys
 
 # 3. Run (Windows)
+
 mvnw.cmd spring-boot:run
 
 # 3. Run (Mac/Linux)
+
 ./mvnw spring-boot:run
-```
+
+````
 
 No manual configuration needed! Each developer has their own `.env` file locally.
 
@@ -206,7 +122,7 @@ MONGODB_DATABASE=emailhog
 
 # Google Gemini API (required)
 GEMINI_API_KEY=YOUR_API_KEY
-```
+````
 
 Spring Boot automatically injects these into:
 

@@ -35,49 +35,35 @@ A full-featured email sandbox application built with **Spring Boot 3.4.1** that 
 
 ## 🚀 Getting Started
 
-### 1. Clone the Repository
+### 1. Clone Repository
 
 ```bash
 git clone https://github.com/yourusername/mail-clone.git
-cd mail-clone/mail-clone/mail-clone
+cd mail-clone/mail-clone
 ```
 
-### 2. Setup Environment Variables
+### 2. Create `.env` File
 
 ```bash
-# Copy the template
 cp .env.example .env
-
-# Edit .env with your actual credentials
-notepad .env
 ```
 
-Edit `.env` and add your credentials:
+### 3. Add Your Credentials
+
+Edit `.env` with your MongoDB URI and Gemini API Key:
 
 ```properties
-# MongoDB Atlas Configuration (https://www.mongodb.com/cloud/atlas)
-MONGODB_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@YOUR_CLUSTER.mongodb.net/?appName=mail-clone
+MONGODB_URI=YOUR_MONGODB_URI_HERE
 MONGODB_DATABASE=emailhog
-
-# Gemini AI Configuration (https://aistudio.google.com)
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
+GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
 ```
 
-### 3. Build the Project
+Get credentials from:
 
-**Windows:**
+- **MongoDB Atlas:** https://www.mongodb.com/cloud/atlas
+- **Gemini API:** https://aistudio.google.com
 
-```bash
-mvnw.cmd clean install
-```
-
-**Mac/Linux:**
-
-```bash
-./mvnw clean install
-```
-
-### 4. Run the Application
+### 4. Run Application
 
 **Windows:**
 
@@ -91,11 +77,7 @@ mvnw.cmd spring-boot:run
 ./mvnw spring-boot:run
 ```
 
-The app will automatically read credentials from your `.env` file.
-
-### 5. Access the Application
-
-Open your browser and navigate to:
+### 5. Open Browser
 
 ```
 http://localhost:8080
@@ -103,120 +85,28 @@ http://localhost:8080
 
 ---
 
-## ⚠️ Important Notes
-
-### Directory Path
-
-After cloning, make sure to navigate to the **correct folder**:
-
-```bash
-cd mail-clone/mail-clone/mail-clone
-```
-
-There are **3 nested `mail-clone/` folders** - you need to go to the deepest one!
-
-### Maven Wrapper
-
-This project uses **Maven Wrapper** - no need to install Maven globally:
-
-- **Windows:** `mvnw.cmd` (batch file)
-- **Mac/Linux:** `./mvnw` (shell script)
-
-Always use `mvnw.cmd` on Windows, not `mvn` command!
-
-## 📁 Project Structure
-
-```
-mail-clone/
-├── .env                                       # Your credentials (private, not committed)
-├── .env.example                               # Template with placeholders (public)
-├── application.properties                     # Configuration with placeholders (public)
-├── pom.xml                                    # Maven configuration
-├── SETUP_INSTRUCTIONS.md                      # Setup guide for new developers
-├── src/
-│   ├── main/
-│   │   ├── java/com/javahog/mail_clone/
-│   │   │   ├── AttachmentController.java      # Handles file uploads
-│   │   │   ├── InboxController.java           # Email inbox endpoints
-│   │   │   ├── ComposeService.java            # Email composition logic
-│   │   │   ├── InboxService.java              # Email retrieval & storage
-│   │   │   ├── SpamAnalyserService.java       # AI-powered spam detection
-│   │   │   ├── LinkCheckerService.java        # URL validation
-│   │   │   ├── SmtpServerStarter.java         # SMTP server initialization
-│   │   │   ├── WebSocketConfig.java           # WebSocket configuration
-│   │   │   ├── Email.java                     # Email entity model
-│   │   │   ├── EmailRepository.java           # MongoDB repository
-│   │   │   └── MailCloneApplication.java      # Application entry point
-│   │   ├── resources/
-│   │   │   └── static/
-│   │   │       └── index.html                 # Web UI
-│   │   └── templates/                         # Thymeleaf templates (if any)
-│   └── test/
-│       └── MailCloneApplicationTests.java     # Unit tests
-└── README.md                                  # This file
-```
-
-**Note:** `.env` file is automatically created when you run `cp .env.example .env`
-
-## 🔌 API Endpoints
-
-### Inbox
-
-- **GET `/emails`** - Retrieve all emails
-- **GET `/emails/{id}`** - Get specific email
-- **POST `/emails/send`** - Send/compose new email
-
-### Attachments
-
-- **POST `/upload`** - Upload file attachment
-- **GET `/download/{id}`** - Download attachment
-
-### Spam Analysis
-
-- **POST `/analyze-spam`** - Analyze email for spam
-- **GET `/spam-results/{id}`** - Get spam analysis results
-
-### Link Checking
-
-- **POST `/check-links`** - Verify links in email content
-
 ## 🔐 Security
 
-- **Environment Variables**: All sensitive data stored in `.env` file (not committed to Git) ✅
-- **`.env` Protection**: Automatically blocked by `.gitignore` - your credentials won't leak ✅
-- **`.env.example`**: Safe template file with placeholders - distributed for team setup ✅
-- **No Hardcoded Secrets**: All API keys and credentials externalized from source code ✅
-- **Dotenv Library**: `spring-dotenv` automatically loads variables from `.env` on startup ✅
+✅ `.env` - Your credentials (private, blocked by `.gitignore`)
+✅ `.env.example` - Safe template (public, on GitHub)
+✅ `application.properties` - Placeholders only (public, on GitHub)
 
-### How It Works
+New team members just follow the 5 steps above!
 
-1. **`.env.example`** - Public template (safe to commit)
+---
 
-   ```properties
-   MONGODB_URI=mongodb+srv://YOUR_USERNAME:YOUR_PASSWORD@...
-   GEMINI_API_KEY=YOUR_GEMINI_API_KEY_HERE
-   ```
+## 📋 Project Structure
 
-2. **`.env`** - Your private copy (NOT committed, blocked by `.gitignore`)
-
-   ```properties
-   MONGODB_URI=mongodb+srv://actualuser:actualpass@...
-   GEMINI_API_KEY=ActualKeyXYZ...
-   ```
-
-3. **Spring Boot** - Automatically reads from `.env` at startup
-   - No manual configuration needed
-   - No environment variable setting needed
-   - Clean and team-friendly approach
-
-### For Team Members
-
-New developers simply:
-
-```bash
-cp .env.example .env
-# Edit .env with their own credentials
-# Then run: mvn spring-boot:run
+```
+mail-clone/mail-clone/
+├── .env                     # Your credentials (private)
+├── .env.example             # Template (public)
+├── application.properties   # Config (public)
+├── pom.xml                  # Maven config
+├── src/
+│   ├── main/java/...        # Application code
+│   └── resources/static/    # Web UI
+└── README.md                # This file
 ```
 
 No manual setup or configuration files needed! ✅
