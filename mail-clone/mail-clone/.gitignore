@@ -31,3 +31,21 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Application Configuration & Secrets ###
+**/application-*.properties
+.env
+.env.local
+*.key
+*.pem
+
+### Sensitive Files ###
+*.docx
+*.doc
+*.xlsx
+credentials.json
+secrets.json
+
+### OS Files ###
+.DS_Store
+Thumbs.db
